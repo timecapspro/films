@@ -2,13 +2,14 @@
 
 namespace backend\controllers;
 
+use backend\components\JwtAuthFilter;
+use backend\components\JwtService;
 use common\models\User;
 use Yii;
 use yii\filters\ContentNegotiator;
 use yii\filters\VerbFilter;
 use yii\web\Controller;
 use yii\web\Response;
-use yii\web\UnauthorizedHttpException;
 
 class ApiAuthController extends Controller
 {
@@ -23,11 +24,14 @@ class ApiAuthController extends Controller
                     'application/json' => Response::FORMAT_JSON,
                 ],
             ],
+            'authenticator' => [
+                'class' => JwtAuthFilter::class,
+                'except' => ['login'],
+            ],
             'verbs' => [
                 'class' => VerbFilter::class,
                 'actions' => [
                     'login' => ['post'],
-                    'logout' => ['post'],
                     'me' => ['get'],
                 ],
             ],
@@ -47,25 +51,23 @@ class ApiAuthController extends Controller
 
         $user = User::findOne(['email' => $email, 'status' => User::STATUS_ACTIVE]);
         if (!$user || !$user->validatePassword($password)) {
-            throw new UnauthorizedHttpException('Invalid credentials.');
+            Yii::$app->response->statusCode = 401;
+            return ['message' => 'Invalid credentials'];
         }
 
-        Yii::$app->user->login($user, 3600 * 24 * 30);
+        $jwt = new JwtService(Yii::$app->params['jwtSecret'] ?? null, Yii::$app->params['jwtTtl'] ?? null);
 
-        return ['email' => $user->email];
-    }
-
-    public function actionLogout()
-    {
-        Yii::$app->user->logout();
-
-        return ['ok' => true];
+        return [
+            'token' => $jwt->issueToken($user),
+            'email' => $user->email,
+        ];
     }
 
     public function actionMe()
     {
         if (Yii::$app->user->isGuest) {
-            throw new UnauthorizedHttpException('Not authenticated.');
+            Yii::$app->response->statusCode = 401;
+            return ['message' => 'Not authenticated'];
         }
 
         /** @var User $user */

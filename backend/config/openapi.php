@@ -19,10 +19,10 @@ return [
     ],
     'components' => [
         'securitySchemes' => [
-            'cookieAuth' => [
-                'type' => 'apiKey',
-                'in' => 'cookie',
-                'name' => '_identity-backend',
+            'bearerAuth' => [
+                'type' => 'http',
+                'scheme' => 'bearer',
+                'bearerFormat' => 'JWT',
             ],
         ],
         'schemas' => [
@@ -35,6 +35,14 @@ return [
                 'required' => ['email', 'password'],
             ],
             'AuthResponse' => [
+                'type' => 'object',
+                'properties' => [
+                    'token' => ['type' => 'string'],
+                    'email' => ['type' => 'string', 'format' => 'email'],
+                ],
+                'required' => ['token', 'email'],
+            ],
+            'MeResponse' => [
                 'type' => 'object',
                 'properties' => [
                     'email' => ['type' => 'string', 'format' => 'email'],
@@ -175,40 +183,19 @@ return [
                 ],
             ],
         ],
-        '/api/auth/logout' => [
-            'post' => [
-                'tags' => ['Auth'],
-                'summary' => 'Выход пользователя',
-                'responses' => [
-                    '200' => [
-                        'description' => 'Успешный выход',
-                        'content' => [
-                            'application/json' => [
-                                'schema' => [
-                                    'type' => 'object',
-                                    'properties' => [
-                                        'ok' => ['type' => 'boolean'],
-                                    ],
-                                ],
-                            ],
-                        ],
-                    ],
-                ],
-            ],
-        ],
         '/api/me' => [
             'get' => [
                 'tags' => ['Auth'],
                 'summary' => 'Получить данные текущего пользователя',
                 'security' => [
-                    ['cookieAuth' => []],
+                    ['bearerAuth' => []],
                 ],
                 'responses' => [
                     '200' => [
                         'description' => 'Пользователь',
                         'content' => [
                             'application/json' => [
-                                'schema' => ['$ref' => '#/components/schemas/AuthResponse'],
+                                'schema' => ['$ref' => '#/components/schemas/MeResponse'],
                             ],
                         ],
                     ],
@@ -223,7 +210,7 @@ return [
                 'tags' => ['Movies'],
                 'summary' => 'Список фильмов',
                 'security' => [
-                    ['cookieAuth' => []],
+                    ['bearerAuth' => []],
                 ],
                 'parameters' => [
                     [
@@ -267,7 +254,7 @@ return [
                 'tags' => ['Movies'],
                 'summary' => 'Создать фильм',
                 'security' => [
-                    ['cookieAuth' => []],
+                    ['bearerAuth' => []],
                 ],
                 'requestBody' => [
                     'required' => true,
@@ -310,7 +297,7 @@ return [
                 'tags' => ['Movies'],
                 'summary' => 'Экспорт фильмов в CSV',
                 'security' => [
-                    ['cookieAuth' => []],
+                    ['bearerAuth' => []],
                 ],
                 'parameters' => [
                     [
@@ -341,7 +328,7 @@ return [
                 'tags' => ['Movies'],
                 'summary' => 'Получить фильм',
                 'security' => [
-                    ['cookieAuth' => []],
+                    ['bearerAuth' => []],
                 ],
                 'parameters' => [
                     [
@@ -374,7 +361,7 @@ return [
                 'tags' => ['Movies'],
                 'summary' => 'Обновить фильм',
                 'security' => [
-                    ['cookieAuth' => []],
+                    ['bearerAuth' => []],
                 ],
                 'parameters' => [
                     [
@@ -423,7 +410,7 @@ return [
                 'tags' => ['Movies'],
                 'summary' => 'Обновить фильм (POST)',
                 'security' => [
-                    ['cookieAuth' => []],
+                    ['bearerAuth' => []],
                 ],
                 'parameters' => [
                     [
@@ -472,7 +459,7 @@ return [
                 'tags' => ['Movies'],
                 'summary' => 'Удалить фильм',
                 'security' => [
-                    ['cookieAuth' => []],
+                    ['bearerAuth' => []],
                 ],
                 'parameters' => [
                     [
@@ -509,7 +496,7 @@ return [
                 'tags' => ['Movies'],
                 'summary' => 'Переместить фильм между списками',
                 'security' => [
-                    ['cookieAuth' => []],
+                    ['bearerAuth' => []],
                 ],
                 'parameters' => [
                     [
@@ -555,7 +542,7 @@ return [
                 'tags' => ['Movies'],
                 'summary' => 'Восстановить фильм из удаленных',
                 'security' => [
-                    ['cookieAuth' => []],
+                    ['bearerAuth' => []],
                 ],
                 'parameters' => [
                     [
@@ -603,7 +590,7 @@ return [
                 'tags' => ['Movies'],
                 'summary' => 'Проверить дубликаты по названию',
                 'security' => [
-                    ['cookieAuth' => []],
+                    ['bearerAuth' => []],
                 ],
                 'requestBody' => [
                     'required' => true,

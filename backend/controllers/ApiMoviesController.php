@@ -5,14 +5,13 @@ namespace backend\controllers;
 use common\models\Movie;
 use Yii;
 use yii\db\Expression;
-use yii\filters\AccessControl;
+use backend\components\JwtAuthFilter;
 use yii\filters\ContentNegotiator;
 use yii\filters\VerbFilter;
 use yii\web\BadRequestHttpException;
 use yii\web\Controller;
 use yii\web\NotFoundHttpException;
 use yii\web\Response;
-use yii\web\UnauthorizedHttpException;
 use yii\web\UploadedFile;
 use yii\helpers\Url;
 
@@ -29,17 +28,8 @@ class ApiMoviesController extends Controller
                     'application/json' => Response::FORMAT_JSON,
                 ],
             ],
-            'access' => [
-                'class' => AccessControl::class,
-                'rules' => [
-                    [
-                        'allow' => true,
-                        'roles' => ['@'],
-                    ],
-                ],
-                'denyCallback' => function () {
-                    throw new UnauthorizedHttpException('Not authenticated.');
-                },
+            'authenticator' => [
+                'class' => JwtAuthFilter::class,
             ],
             'verbs' => [
                 'class' => VerbFilter::class,

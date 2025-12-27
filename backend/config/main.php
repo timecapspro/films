@@ -21,12 +21,8 @@ return [
         ],
         'user' => [
             'identityClass' => 'common\models\User',
-            'enableAutoLogin' => true,
-            'identityCookie' => ['name' => '_identity-backend', 'httpOnly' => true],
-        ],
-        'session' => [
-            // this is the name of the session cookie used for login on the backend
-            'name' => 'advanced-backend',
+            'enableAutoLogin' => false,
+            'enableSession' => false,
         ],
         'log' => [
             'traceLevel' => YII_DEBUG ? 3 : 0,
@@ -45,7 +41,6 @@ return [
             'showScriptName' => false,
             'rules' => [
                 'POST api/auth/login' => 'api-auth/login',
-                'POST api/auth/logout' => 'api-auth/logout',
                 'GET api/me' => 'api-auth/me',
                 'GET api/movies' => 'api-movies/index',
                 'GET api/movies/export.csv' => 'api-movies/export',
