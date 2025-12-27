@@ -404,9 +404,12 @@ class ApiMoviesController extends Controller
     private function savePoster(Movie $movie, UploadedFile $file): string
     {
         $uploadDir = Yii::getAlias('@backend/web/uploads/posters');
-        FileHelper::createDirectory($uploadDir, 0775, true);
+        FileHelper::createDirectory($uploadDir, 0777, true);
         if (!is_writable($uploadDir)) {
-            throw new \RuntimeException('Upload directory is not writable.');
+            @chmod($uploadDir, 0777);
+        }
+        if (!is_writable($uploadDir)) {
+            throw new \RuntimeException('Upload directory is not writable: ' . $uploadDir);
         }
 
         if (!$movie->id) {
@@ -418,7 +421,13 @@ class ApiMoviesController extends Controller
         $path = $uploadDir . DIRECTORY_SEPARATOR . $filename;
         $saved = $file->saveAs($path);
         if (!$saved || !is_file($path)) {
-            throw new \RuntimeException('Failed to save poster file.');
+            $details = [
+                'error' => $file->error,
+                'tempName' => $file->tempName,
+                'exists' => $file->tempName ? (int)is_file($file->tempName) : 0,
+                'path' => $path,
+            ];
+            throw new \RuntimeException('Failed to save poster file: ' . json_encode($details));
         }
 
         return 'uploads/posters/' . $filename;
