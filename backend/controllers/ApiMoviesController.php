@@ -8,6 +8,7 @@ use yii\db\Expression;
 use backend\components\JwtAuthFilter;
 use yii\filters\ContentNegotiator;
 use yii\filters\VerbFilter;
+use yii\helpers\FileHelper;
 use yii\web\BadRequestHttpException;
 use yii\web\Controller;
 use yii\web\NotFoundHttpException;
@@ -402,9 +403,10 @@ class ApiMoviesController extends Controller
 
     private function savePoster(Movie $movie, UploadedFile $file): string
     {
-        $uploadDir = Yii::getAlias('@frontend/web/uploads/posters');
-        if (!is_dir($uploadDir)) {
-            mkdir($uploadDir, 0775, true);
+        $uploadDir = Yii::getAlias('@backend/web/uploads/posters');
+        FileHelper::createDirectory($uploadDir, 0775, true);
+        if (!is_writable($uploadDir)) {
+            throw new \RuntimeException('Upload directory is not writable.');
         }
 
         if (!$movie->id) {
@@ -414,7 +416,10 @@ class ApiMoviesController extends Controller
         $extension = $file->getExtension();
         $filename = $movie->id . ($extension ? '.' . $extension : '');
         $path = $uploadDir . DIRECTORY_SEPARATOR . $filename;
-        $file->saveAs($path);
+        $saved = $file->saveAs($path);
+        if (!$saved || !is_file($path)) {
+            throw new \RuntimeException('Failed to save poster file.');
+        }
 
         return 'uploads/posters/' . $filename;
     }
