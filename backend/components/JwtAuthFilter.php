@@ -24,7 +24,15 @@ class JwtAuthFilter extends ActionFilter
         }
 
         $token = $matches[1];
-        $jwt = new JwtService(Yii::$app->params['jwtSecret'] ?? null, Yii::$app->params['jwtTtl'] ?? null);
+        $secret = Yii::$app->params['jwtSecret'] ?? null;
+        if (empty($secret)) {
+            Yii::$app->response->statusCode = 500;
+            Yii::$app->response->format = Response::FORMAT_JSON;
+            Yii::$app->response->data = ['message' => 'JWT secret is not configured.'];
+            return false;
+        }
+
+        $jwt = new JwtService($secret, Yii::$app->params['jwtTtl'] ?? null);
         $payload = $jwt->validateToken($token);
         if (!$payload || empty($payload['sub'])) {
             $this->deny();
