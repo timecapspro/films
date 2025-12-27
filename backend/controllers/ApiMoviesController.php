@@ -1,6 +1,6 @@
 <?php
 
-namespace frontend\controllers;
+namespace backend\controllers;
 
 use common\models\Movie;
 use Yii;
@@ -412,7 +412,7 @@ class ApiMoviesController extends Controller
 
     private function savePoster(Movie $movie, UploadedFile $file): string
     {
-        $uploadDir = Yii::getAlias('@frontend/web/uploads/posters');
+        $uploadDir = Yii::getAlias('@backend/web/uploads/posters');
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0775, true);
         }
@@ -434,7 +434,7 @@ class ApiMoviesController extends Controller
         if (!$posterPath) {
             return;
         }
-        $fullPath = Yii::getAlias('@frontend/web/' . $posterPath);
+        $fullPath = Yii::getAlias('@backend/web/' . $posterPath);
         if (is_file($fullPath)) {
             @unlink($fullPath);
         }
