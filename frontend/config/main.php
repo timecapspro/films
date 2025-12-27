@@ -14,6 +14,9 @@ return [
     'components' => [
         'request' => [
             'csrfParam' => '_csrf-frontend',
+            'parsers' => [
+                'application/json' => \yii\web\JsonParser::class,
+            ],
         ],
         'user' => [
             'identityClass' => 'common\models\User',
@@ -36,14 +39,25 @@ return [
         'errorHandler' => [
             'errorAction' => 'site/error',
         ],
-        /*
         'urlManager' => [
             'enablePrettyUrl' => true,
             'showScriptName' => false,
             'rules' => [
+                'POST api/auth/login' => 'api-auth/login',
+                'POST api/auth/logout' => 'api-auth/logout',
+                'GET api/me' => 'api-auth/me',
+                'GET api/movies' => 'api-movies/index',
+                'GET api/movies/export.csv' => 'api-movies/export',
+                'GET api/movies/<id>' => 'api-movies/view',
+                'POST api/movies' => 'api-movies/create',
+                'PATCH api/movies/<id>' => 'api-movies/update',
+                'POST api/movies/<id>' => 'api-movies/update',
+                'DELETE api/movies/<id>' => 'api-movies/delete',
+                'POST api/movies/<id>/move' => 'api-movies/move',
+                'POST api/movies/<id>/restore' => 'api-movies/restore',
+                'POST api/movies/duplicates/check' => 'api-movies/duplicates-check',
             ],
         ],
-        */
     ],
     'params' => $params,
 ];
