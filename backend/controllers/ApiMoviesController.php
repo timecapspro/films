@@ -403,6 +403,9 @@ class ApiMoviesController extends Controller
 
     private function savePoster(Movie $movie, UploadedFile $file): string
     {
+        if ($file->error !== UPLOAD_ERR_OK) {
+            throw new BadRequestHttpException('Poster upload failed with error code: ' . $file->error);
+        }
         $uploadDir = Yii::getAlias('@backend/web/uploads/posters');
         FileHelper::createDirectory($uploadDir, 0777, true);
         if (!is_writable($uploadDir)) {
