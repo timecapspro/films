@@ -438,7 +438,7 @@ class ApiMoviesController extends Controller
         if (!$posterPath) {
             return;
         }
-        $fullPath = Yii::getAlias('@backend/web/' . $posterPath);
+        $fullPath = Yii::getAlias('@frontend/web/' . $posterPath);
         if (is_file($fullPath)) {
             @unlink($fullPath);
         }
