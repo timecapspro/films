@@ -55,7 +55,7 @@ class ApiAuthController extends Controller
             return ['message' => 'Invalid credentials'];
         }
 
-        $secret = Yii::$app->params['jwtSecret'] ?? null;
+        $secret = JwtService::resolveSecret();
         if (empty($secret)) {
             Yii::$app->response->statusCode = 500;
             return ['message' => 'JWT secret is not configured.'];

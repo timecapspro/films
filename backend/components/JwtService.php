@@ -3,6 +3,7 @@
 namespace backend\components;
 
 use common\models\User;
+use Yii;
 use yii\base\InvalidConfigException;
 
 class JwtService
@@ -18,6 +19,21 @@ class JwtService
 
         $this->secret = $secret;
         $this->ttlSeconds = $ttlSeconds ?? 60 * 60 * 24 * 30;
+    }
+
+    public static function resolveSecret(): ?string
+    {
+        $secret = Yii::$app->params['jwtSecret'] ?? null;
+        if (!empty($secret)) {
+            return $secret;
+        }
+
+        $request = Yii::$app->getRequest();
+        if ($request instanceof \yii\web\Request && !empty($request->cookieValidationKey)) {
+            return $request->cookieValidationKey;
+        }
+
+        return null;
     }
 
     public function issueToken(User $user): string

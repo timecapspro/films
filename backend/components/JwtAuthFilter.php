@@ -24,7 +24,7 @@ class JwtAuthFilter extends ActionFilter
         }
 
         $token = $matches[1];
-        $secret = Yii::$app->params['jwtSecret'] ?? null;
+        $secret = JwtService::resolveSecret();
         if (empty($secret)) {
             Yii::$app->response->statusCode = 500;
             Yii::$app->response->format = Response::FORMAT_JSON;
