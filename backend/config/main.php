@@ -18,6 +18,13 @@ return [
             'parsers' => [
                 'application/json' => \yii\web\JsonParser::class,
             ],
+            'trustedHosts' => [
+                '172.27.0.1' => [
+                    'X-Forwarded-For',
+                    'X-Forwarded-Proto',
+                    'X-Forwarded-Host',
+                ],
+            ],
         ],
         'user' => [
             'identityClass' => 'common\models\User',
