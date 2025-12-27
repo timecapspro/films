@@ -9,7 +9,7 @@ use yii\web\Response;
 
 class JwtAuthFilter extends ActionFilter
 {
-    public array $except = [];
+    public $except = [];
 
     public function beforeAction($action): bool
     {
