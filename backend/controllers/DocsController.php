@@ -14,7 +14,7 @@ class DocsController extends Controller
     public function actionIndex(): string
     {
         return $this->render('index', [
-            'specUrl' => Url::to(['docs/json'], true),
+            'specUrl' => Url::to(['docs/json']),
         ]);
     }
 
