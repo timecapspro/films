@@ -14,16 +14,17 @@ class DocsController extends Controller
     public function actionIndex(): string
     {
         return $this->render('index', [
-            'specUrl' => Url::to(['docs/json']),
+            'specUrl' => Url::to(['docs/json'], 'https'),
         ]);
     }
 
     public function actionJson(): array
     {
         $spec = require Yii::getAlias('@backend/config/openapi.php');
+        $hostInfo = preg_replace('/^http:/i', 'https:', Yii::$app->request->hostInfo);
         $spec['servers'] = [
             [
-                'url' => Yii::$app->request->hostInfo,
+                'url' => $hostInfo,
                 'description' => 'Текущий хост',
             ],
         ];
