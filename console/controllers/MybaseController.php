@@ -104,6 +104,7 @@ class MybaseController extends Controller
             $movie->watched = true;
             $movie->rating = $rating;
             $movie->watched_at = '2017-01-01';
+            $movie->url = $this->resolveKinopoiskUrl($link, $film, $kinopoiskId);
 
             $posterUrl = $film['posterUrl'] ?? null;
             if ($posterUrl) {
@@ -120,6 +121,93 @@ class MybaseController extends Controller
             }
 
             $this->stdout("  Saved.\n");
+        }
+
+        $this->printSummary();
+
+        return self::EXIT_CODE_NORMAL;
+    }
+
+    public function actionBackfillUrl(): int
+    {
+        if ($this->file === '') {
+            $this->stderr("--file is required.\n");
+            return self::EXIT_CODE_ERROR;
+        }
+
+        if ($this->apiKey === '') {
+            $this->apiKey = (string)(Yii::$app->params['kinopoiskApiKey'] ?? '');
+        }
+
+        if ($this->apiKey === '') {
+            $this->stderr("--apiKey is required (or set params['kinopoiskApiKey']).\n");
+            return self::EXIT_CODE_ERROR;
+        }
+
+        $path = Yii::getAlias($this->file);
+        if (!is_file($path)) {
+            $this->stderr("File not found: {$path}\n");
+            return self::EXIT_CODE_ERROR;
+        }
+
+        $rows = $this->readTsv($path);
+        $total = count($rows);
+        if ($total === 0) {
+            $this->stderr("No rows found in {$path}.\n");
+            return self::EXIT_CODE_ERROR;
+        }
+
+        $baseUrl = 'https://kinopoiskapiunofficial.tech';
+
+        foreach ($rows as $index => $row) {
+            $position = $index + 1;
+            $title = trim((string)($row['Название'] ?? ''));
+            $year = trim((string)($row['Год'] ?? ''));
+            $link = trim((string)($row['Ссылка'] ?? ''));
+
+            if ($title === '') {
+                $this->stderr("[{$position}/{$total}] Skipping row without title.\n");
+                continue;
+            }
+
+            $movie = $this->findMovieByTitleYear($title, $year);
+            if ($movie === null) {
+                $this->missingMatches[] = $this->formatRowLabel($title, $year);
+                $this->stderr("[{$position}/{$total}] Movie not found in DB.\n");
+                continue;
+            }
+
+            if (!empty($movie->url)) {
+                $this->stdout("[{$position}/{$total}] {$title} ({$year})... already set.\n");
+                continue;
+            }
+
+            $this->stdout("[{$position}/{$total}] {$title} ({$year})... updating.\n");
+
+            $kinopoiskId = $this->extractKinopoiskId($link);
+            if ($kinopoiskId === null) {
+                $kinopoiskId = $this->searchKinopoiskId($baseUrl, $title, $year);
+            }
+
+            $film = null;
+            if ($kinopoiskId !== null) {
+                $film = $this->fetchFilm($baseUrl, $kinopoiskId, $title);
+            }
+
+            $movie->url = $this->resolveKinopoiskUrl($link, $film, $kinopoiskId);
+            if (empty($movie->url)) {
+                $this->missingMatches[] = $this->formatRowLabel($title, $year);
+                $this->stderr("  URL not resolved.\n");
+                continue;
+            }
+
+            if (!$movie->save()) {
+                $this->apiErrors[] = $this->formatRowLabel($title, $year);
+                $this->stderr("  Save failed: " . json_encode($movie->getFirstErrors(), JSON_UNESCAPED_UNICODE) . "\n");
+                continue;
+            }
+
+            $this->stdout("  URL saved.\n");
         }
 
         $this->printSummary();
@@ -337,6 +425,40 @@ class MybaseController extends Controller
         }
 
         return $query->exists();
+    }
+
+    private function findMovieByTitleYear(string $title, string $year): ?Movie
+    {
+        $query = Movie::find()->where(['user_id' => $this->userId]);
+        $query->andWhere(['=', new Expression('LOWER(title)'), mb_strtolower($title)]);
+        if ($year !== '') {
+            $query->andWhere(['year' => (int)$year]);
+        }
+
+        return $query->one();
+    }
+
+    private function resolveKinopoiskUrl(string $link, ?array $film, ?int $kinopoiskId): ?string
+    {
+        $linkId = $this->extractKinopoiskId($link);
+        if ($linkId !== null) {
+            return $this->buildKinopoiskUrl($linkId);
+        }
+
+        if (!empty($film['webUrl'])) {
+            return (string)$film['webUrl'];
+        }
+
+        if ($kinopoiskId !== null) {
+            return $this->buildKinopoiskUrl($kinopoiskId);
+        }
+
+        return null;
+    }
+
+    private function buildKinopoiskUrl(int $kinopoiskId): string
+    {
+        return "https://www.kinopoisk.ru/film/{$kinopoiskId}/";
     }
 
     private function formatRowLabel(string $title, string $year): string

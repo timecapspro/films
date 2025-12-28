@@ -19,6 +19,7 @@ use yii\db\ActiveRecord;
  * @property int|null $rating
  * @property string|null $watched_at
  * @property string|null $poster_path
+ * @property string|null $url
  * @property string|null $deleted_from_list
  * @property string $added_at
  * @property string $updated_at
@@ -43,7 +44,7 @@ class Movie extends ActiveRecord
             [['runtime_min'], 'integer', 'min' => 1, 'max' => 600],
             [['rating'], 'integer', 'min' => 1, 'max' => 10],
             [['watched'], 'boolean'],
-            [['genres_csv', 'description', 'notes', 'poster_path', 'deleted_from_list'], 'string'],
+            [['genres_csv', 'description', 'notes', 'poster_path', 'url', 'deleted_from_list'], 'string'],
             [['watched_at'], 'date', 'format' => 'php:Y-m-d'],
             ['title', 'string', 'max' => 255],
             [['added_at', 'updated_at'], 'safe'],
