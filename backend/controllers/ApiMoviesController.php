@@ -254,6 +254,7 @@ class ApiMoviesController extends Controller
             'rating',
             'watchedAt',
             'posterUrl',
+            'url',
             'addedAt',
         ]);
 
@@ -271,6 +272,7 @@ class ApiMoviesController extends Controller
                 $movie->rating,
                 $movie->watched_at,
                 $this->getPosterUrl($movie),
+                $movie->url,
                 $this->formatAddedAt($movie->added_at),
             ]);
         }
@@ -319,6 +321,9 @@ class ApiMoviesController extends Controller
         }
         if (array_key_exists('notes', $data)) {
             $movie->notes = $data['notes'] !== null ? (string)$data['notes'] : null;
+        }
+        if (array_key_exists('url', $data)) {
+            $movie->url = $data['url'] !== null ? (string)$data['url'] : null;
         }
 
         if (array_key_exists('watched', $data)) {
@@ -378,6 +383,7 @@ class ApiMoviesController extends Controller
             'rating' => $movie->rating === null ? null : (int)$movie->rating,
             'watchedAt' => $movie->watched_at ?: null,
             'posterUrl' => $this->getPosterUrl($movie),
+            'url' => $movie->url ?? '',
             'addedAt' => $this->formatAddedAt($movie->added_at),
         ];
     }
