@@ -48,6 +48,7 @@ return [
             'showScriptName' => false,
             'rules' => [
                 'POST api/auth/login' => 'api-auth/login',
+                'POST api/auth/register' => 'api-auth/register',
                 'GET api/me' => 'api-auth/me',
                 'GET api/movies' => 'api-movies/index',
                 'GET api/movies/export.csv' => 'api-movies/export',

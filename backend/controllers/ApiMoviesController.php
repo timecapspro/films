@@ -74,7 +74,7 @@ class ApiMoviesController extends Controller
             ]);
         }
 
-        $this->applySort($query, $sort);
+        $this->applySort($query, $sort, $list);
 
         $total = (clone $query)->count();
         $items = $query
@@ -160,6 +160,7 @@ class ApiMoviesController extends Controller
             if ($movie->list !== Movie::LIST_DELETED) {
                 $movie->deleted_from_list = $movie->list;
                 $movie->list = Movie::LIST_DELETED;
+                $this->setDeletedAt($movie, gmdate('Y-m-d H:i:s'));
                 $movie->save(false);
             }
         }
@@ -199,6 +200,7 @@ class ApiMoviesController extends Controller
 
         $movie->list = $targetList;
         $movie->deleted_from_list = null;
+        $this->setDeletedAt($movie, null);
         $movie->save(false);
 
         return ['ok' => true];
@@ -352,14 +354,45 @@ class ApiMoviesController extends Controller
         return (int)$value;
     }
 
-    private function applySort($query, string $sort): void
+    private function applySort($query, string $sort, string $list): void
     {
+        if (str_starts_with($sort, 'deleted_at_') && $list !== Movie::LIST_DELETED) {
+            $sort = 'added_desc';
+        }
+
         switch ($sort) {
+            case 'added_asc':
+                $query->orderBy(['added_at' => SORT_ASC]);
+                break;
             case 'title_asc':
                 $query->orderBy(['title' => SORT_ASC]);
                 break;
+            case 'title_desc':
+                $query->orderBy(['title' => SORT_DESC]);
+                break;
             case 'rating_desc':
-                $query->orderBy(['rating' => SORT_DESC, 'added_at' => SORT_DESC]);
+                $query->orderBy(new Expression('rating IS NULL, rating DESC, added_at DESC'));
+                break;
+            case 'rating_asc':
+                $query->orderBy(new Expression('rating IS NOT NULL, rating ASC, added_at DESC'));
+                break;
+            case 'year_desc':
+                $query->orderBy(['year' => SORT_DESC, 'added_at' => SORT_DESC]);
+                break;
+            case 'year_asc':
+                $query->orderBy(['year' => SORT_ASC, 'added_at' => SORT_DESC]);
+                break;
+            case 'watched_at_desc':
+                $query->orderBy(new Expression('watched_at IS NULL, watched_at DESC, added_at DESC'));
+                break;
+            case 'watched_at_asc':
+                $query->orderBy(new Expression('watched_at IS NOT NULL, watched_at ASC, added_at DESC'));
+                break;
+            case 'deleted_at_desc':
+                $query->orderBy(new Expression('deleted_at IS NULL, deleted_at DESC, added_at DESC'));
+                break;
+            case 'deleted_at_asc':
+                $query->orderBy(new Expression('deleted_at IS NOT NULL, deleted_at ASC, added_at DESC'));
                 break;
             case 'added_desc':
             default:
@@ -386,6 +419,13 @@ class ApiMoviesController extends Controller
             'url' => $movie->url ?? '',
             'addedAt' => $this->formatAddedAt($movie->added_at),
         ];
+    }
+
+    private function setDeletedAt(Movie $movie, ?string $value): void
+    {
+        if ($movie->hasAttribute('deleted_at')) {
+            $movie->setAttribute('deleted_at', $value);
+        }
     }
 
     private function getPosterUrl(Movie $movie): ?string
