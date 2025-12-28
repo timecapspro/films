@@ -7,7 +7,6 @@ use Yii;
 use yii\console\Controller;
 use yii\db\Expression;
 use yii\helpers\FileHelper;
-use yii\httpclient\Client;
 
 class MybaseController extends Controller
 {
@@ -55,7 +54,7 @@ class MybaseController extends Controller
             return self::EXIT_CODE_ERROR;
         }
 
-        $client = new Client(['baseUrl' => 'https://kinopoiskapiunofficial.tech']);
+        $baseUrl = 'https://kinopoiskapiunofficial.tech';
 
         foreach ($rows as $index => $row) {
             $position = $index + 1;
@@ -74,7 +73,7 @@ class MybaseController extends Controller
 
             $kinopoiskId = $this->extractKinopoiskId($link);
             if ($kinopoiskId === null) {
-                $kinopoiskId = $this->searchKinopoiskId($client, $title, $year);
+                $kinopoiskId = $this->searchKinopoiskId($baseUrl, $title, $year);
                 if ($kinopoiskId === null) {
                     $this->missingMatches[] = $this->formatRowLabel($title, $year);
                     $this->stderr("  Not found by title/year, skipped.\n");
@@ -82,7 +81,7 @@ class MybaseController extends Controller
                 }
             }
 
-            $film = $this->fetchFilm($client, $kinopoiskId, $title);
+            $film = $this->fetchFilm($baseUrl, $kinopoiskId, $title);
             if ($film === null) {
                 $this->stderr("  Failed to fetch film data, skipped.\n");
                 continue;
@@ -177,9 +176,9 @@ class MybaseController extends Controller
         return null;
     }
 
-    private function searchKinopoiskId(Client $client, string $title, string $year): ?int
+    private function searchKinopoiskId(string $baseUrl, string $title, string $year): ?int
     {
-        $response = $this->apiGet($client, '/api/v2.1/films/search-by-keyword', [
+        $response = $this->apiGet($baseUrl, '/api/v2.1/films/search-by-keyword', [
             'keyword' => $title,
             'page' => 1,
         ]);
@@ -208,9 +207,9 @@ class MybaseController extends Controller
         return null;
     }
 
-    private function fetchFilm(Client $client, int $kinopoiskId, string $title): ?array
+    private function fetchFilm(string $baseUrl, int $kinopoiskId, string $title): ?array
     {
-        $response = $this->apiGet($client, "/api/v2.2/films/{$kinopoiskId}");
+        $response = $this->apiGet($baseUrl, "/api/v2.2/films/{$kinopoiskId}");
         if (!$response) {
             $this->apiErrors[] = $this->formatRowLabel($title, (string)$kinopoiskId);
             return null;
@@ -219,19 +218,37 @@ class MybaseController extends Controller
         return $response;
     }
 
-    private function apiGet(Client $client, string $url, array $params = []): ?array
+    private function apiGet(string $baseUrl, string $url, array $params = []): ?array
     {
         $this->throttle();
 
-        $response = $client->get($url, $params, [
-            'X-API-KEY' => $this->apiKey,
-        ])->send();
+        $requestUrl = rtrim($baseUrl, '/') . $url;
+        if (!empty($params)) {
+            $requestUrl .= '?' . http_build_query($params);
+        }
 
-        if (!$response->isOk) {
+        $ch = curl_init($requestUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'X-API-KEY: ' . $this->apiKey,
+            ],
+            CURLOPT_TIMEOUT => 30,
+        ]);
+        $raw = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($raw === false || $status < 200 || $status >= 300) {
             return null;
         }
 
-        return $response->data;
+        $data = json_decode($raw, true);
+        if (!is_array($data)) {
+            return null;
+        }
+
+        return $data;
     }
 
     private function throttle(): void
