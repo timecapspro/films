@@ -42,6 +42,23 @@ return [
                 ],
                 'required' => ['token', 'email'],
             ],
+            'RegisterRequest' => [
+                'type' => 'object',
+                'properties' => [
+                    'username' => ['type' => 'string', 'minLength' => 3],
+                    'email' => ['type' => 'string', 'format' => 'email'],
+                    'password' => ['type' => 'string', 'minLength' => 6],
+                ],
+                'required' => ['username', 'email', 'password'],
+            ],
+            'RegisterResponse' => [
+                'type' => 'object',
+                'properties' => [
+                    'message' => ['type' => 'string'],
+                    'email' => ['type' => 'string', 'format' => 'email'],
+                ],
+                'required' => ['message', 'email'],
+            ],
             'MeResponse' => [
                 'type' => 'object',
                 'properties' => [
@@ -186,6 +203,36 @@ return [
                 ],
             ],
         ],
+        '/api/auth/register' => [
+            'post' => [
+                'tags' => ['Auth'],
+                'summary' => 'Регистрация пользователя',
+                'requestBody' => [
+                    'required' => true,
+                    'content' => [
+                        'application/json' => [
+                            'schema' => ['$ref' => '#/components/schemas/RegisterRequest'],
+                        ],
+                    ],
+                ],
+                'responses' => [
+                    '201' => [
+                        'description' => 'Регистрация успешна',
+                        'content' => [
+                            'application/json' => [
+                                'schema' => ['$ref' => '#/components/schemas/RegisterResponse'],
+                            ],
+                        ],
+                    ],
+                    '400' => [
+                        'description' => 'Некорректные данные',
+                    ],
+                    '409' => [
+                        'description' => 'Конфликт данных',
+                    ],
+                ],
+            ],
+        ],
         '/api/me' => [
             'get' => [
                 'tags' => ['Auth'],
@@ -234,7 +281,23 @@ return [
                     [
                         'name' => 'sort',
                         'in' => 'query',
-                        'schema' => ['type' => 'string', 'enum' => ['added_desc', 'title_asc', 'rating_desc']],
+                        'schema' => [
+                            'type' => 'string',
+                            'enum' => [
+                                'added_desc',
+                                'added_asc',
+                                'title_asc',
+                                'title_desc',
+                                'rating_desc',
+                                'rating_asc',
+                                'year_desc',
+                                'year_asc',
+                                'watched_at_desc',
+                                'watched_at_asc',
+                                'deleted_at_desc',
+                                'deleted_at_asc',
+                            ],
+                        ],
                     ],
                     [
                         'name' => 'q',
