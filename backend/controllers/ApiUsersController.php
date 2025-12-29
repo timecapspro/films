@@ -57,19 +57,8 @@ class ApiUsersController extends Controller
             ]);
         }
 
-        $query
-            ->leftJoin(
-                '{{%movie}} m',
-                'm.user_id = u.id AND (m.list IS NULL OR m.list <> :deleted)',
-                [':deleted' => Movie::LIST_DELETED]
-            )
-            ->addSelect([
-                'u.*',
-                'movies_count' => new Expression('COUNT(m.id)'),
-            ])
-            ->groupBy('u.id');
-
         $users = $query->orderBy(['username' => SORT_ASC])->all();
+        $this->hydrateMoviesCount($users);
 
         return [
             'users' => array_map([$this, 'serializeUser'], $users),
@@ -174,6 +163,28 @@ class ApiUsersController extends Controller
             'avatar_url' => $this->getAvatarUrl($user),
             'movies_count' => isset($user->movies_count) ? (int)$user->movies_count : 0,
         ];
+    }
+
+    private function hydrateMoviesCount(array $users): void
+    {
+        if (empty($users)) {
+            return;
+        }
+
+        $userIds = array_map(static fn(User $user) => $user->id, $users);
+        $counts = Movie::find()
+            ->select(['user_id', 'movies_count' => new Expression('COUNT(*)')])
+            ->where(['user_id' => $userIds])
+            ->andWhere(['<>', 'list', Movie::LIST_DELETED])
+            ->groupBy('user_id')
+            ->asArray()
+            ->all();
+
+        $countsByUser = array_column($counts, 'movies_count', 'user_id');
+
+        foreach ($users as $user) {
+            $user->movies_count = isset($countsByUser[$user->id]) ? (int)$countsByUser[$user->id] : 0;
+        }
     }
 
     private function serializeMovie(Movie $movie): array
