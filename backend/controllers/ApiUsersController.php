@@ -57,13 +57,17 @@ class ApiUsersController extends Controller
             ]);
         }
 
-        $query->addSelect([
-            'u.*',
-            'movies_count' => new Expression(
-                '(SELECT COUNT(*) FROM {{%movie}} m WHERE m.user_id = u.id AND m.list <> :deleted)',
+        $query
+            ->leftJoin(
+                '{{%movie}} m',
+                'm.user_id = u.id AND (m.list IS NULL OR m.list <> :deleted)',
                 [':deleted' => Movie::LIST_DELETED]
-            ),
-        ]);
+            )
+            ->addSelect([
+                'u.*',
+                'movies_count' => new Expression('COUNT(m.id)'),
+            ])
+            ->groupBy('u.id');
 
         $users = $query->orderBy(['username' => SORT_ASC])->all();
 
