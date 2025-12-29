@@ -35,6 +35,7 @@ class ApiAuthController extends Controller
                     'login' => ['post'],
                     'register' => ['post'],
                     'me' => ['get'],
+                    'password' => ['post'],
                 ],
             ],
         ]);
@@ -130,5 +131,37 @@ class ApiAuthController extends Controller
         $user = Yii::$app->user->identity;
 
         return ['email' => $user->email];
+    }
+
+    public function actionPassword()
+    {
+        /** @var User $user */
+        $user = Yii::$app->user->identity;
+        $body = Yii::$app->request->bodyParams;
+        $currentPassword = isset($body['currentPassword']) ? (string)$body['currentPassword'] : '';
+        $newPassword = isset($body['newPassword']) ? (string)$body['newPassword'] : '';
+
+        if ($currentPassword === '' || $newPassword === '') {
+            Yii::$app->response->statusCode = 400;
+            return ['message' => 'currentPassword and newPassword are required.'];
+        }
+
+        if (mb_strlen($newPassword) < 6) {
+            Yii::$app->response->statusCode = 400;
+            return ['message' => 'New password is too short.'];
+        }
+
+        if (!$user->validatePassword($currentPassword)) {
+            Yii::$app->response->statusCode = 403;
+            return ['message' => 'Invalid current password.'];
+        }
+
+        $user->setPassword($newPassword);
+        if (!$user->save(false)) {
+            Yii::$app->response->statusCode = 400;
+            return ['message' => 'Failed to update password.'];
+        }
+
+        return ['ok' => true];
     }
 }
