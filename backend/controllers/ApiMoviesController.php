@@ -62,6 +62,7 @@ class ApiMoviesController extends Controller
         $page = max((int)$request->get('page', 1), 1);
         $pageSize = (int)$request->get('pageSize', 12);
         $pageSize = $pageSize > 0 ? $pageSize : 12;
+        $pageSize = min($pageSize, 100);
         $sort = $request->get('sort', 'added_desc');
         $q = $request->get('q');
 
@@ -174,13 +175,7 @@ class ApiMoviesController extends Controller
     public function actionMove($id)
     {
         $movie = $this->findMovie($id);
-        $data = Yii::$app->request->bodyParams;
-        $toList = $data['toList'] ?? null;
-        if (!in_array($toList, [Movie::LIST_MY, Movie::LIST_LATER], true)) {
-            throw new BadRequestHttpException('Invalid toList.');
-        }
-
-        $movie->list = $toList;
+        $movie->list = Movie::LIST_LATER;
         $movie->deleted_from_list = null;
         $movie->save(false);
 
@@ -216,10 +211,13 @@ class ApiMoviesController extends Controller
         if ($title === '') {
             throw new BadRequestHttpException('Title is required.');
         }
-        $year = $data['year'] ?? null;
+        $year = $this->normalizeInt($data['year'] ?? null);
+        if ($year === null) {
+            throw new BadRequestHttpException('Year is required.');
+        }
         $excludeId = $data['excludeId'] ?? null;
 
-        return ['duplicates' => $this->findDuplicates($title, $year, $excludeId, false)];
+        return ['duplicates' => $this->findDuplicatesByTitleAndYear($title, $year, $excludeId)];
     }
 
     public function actionExport()
@@ -684,6 +682,28 @@ class ApiMoviesController extends Controller
 
         if ($excludeDeleted) {
             $query->andWhere(['<>', 'list', Movie::LIST_DELETED]);
+        }
+
+        return array_map(function (Movie $movie) {
+            return [
+                'id' => $movie->id,
+                'title' => $movie->title,
+                'year' => $movie->year === null ? null : (int)$movie->year,
+                'list' => $movie->list,
+            ];
+        }, $query->all());
+    }
+
+    private function findDuplicatesByTitleAndYear(string $title, int $year, ?string $excludeId): array
+    {
+        $query = Movie::find()
+            ->where(['user_id' => Yii::$app->user->id])
+            ->andWhere(['=', new Expression('LOWER(title)'), mb_strtolower($title)])
+            ->andWhere(['year' => $year])
+            ->andWhere(['<>', 'list', Movie::LIST_DELETED]);
+
+        if ($excludeId) {
+            $query->andWhere(['<>', 'id', $excludeId]);
         }
 
         return array_map(function (Movie $movie) {
