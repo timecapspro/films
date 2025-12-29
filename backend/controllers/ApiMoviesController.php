@@ -390,9 +390,14 @@ class ApiMoviesController extends Controller
         $data = Yii::$app->request->bodyParams;
         $movieId = $data['movieId'] ?? null;
         $fromUserId = $data['fromUserId'] ?? null;
+        $targetList = $data['list'] ?? Movie::LIST_MY;
 
         if (!$movieId || !$fromUserId) {
             throw new BadRequestHttpException('movieId and fromUserId are required.');
+        }
+
+        if (!in_array($targetList, [Movie::LIST_MY, Movie::LIST_LATER], true)) {
+            throw new BadRequestHttpException('Invalid list.');
         }
 
         $sourceUser = User::findOne(['id' => $fromUserId, 'status' => User::STATUS_ACTIVE, 'is_public' => 1]);
@@ -412,7 +417,7 @@ class ApiMoviesController extends Controller
 
         $movie = new Movie();
         $movie->user_id = Yii::$app->user->id;
-        $movie->list = Movie::LIST_MY;
+        $movie->list = $targetList;
         $movie->title = $sourceMovie->title;
         $movie->year = $sourceMovie->year;
         $movie->runtime_min = $sourceMovie->runtime_min;
