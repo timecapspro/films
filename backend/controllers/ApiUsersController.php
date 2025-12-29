@@ -46,7 +46,8 @@ class ApiUsersController extends Controller
         $q = Yii::$app->request->get('q');
 
         $query = User::find()
-            ->where(['status' => User::STATUS_ACTIVE, 'is_public' => 1]);
+            ->alias('u')
+            ->where(['u.status' => User::STATUS_ACTIVE, 'u.is_public' => 1]);
 
         if (!empty($q)) {
             $query->andWhere([
