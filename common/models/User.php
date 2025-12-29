@@ -17,6 +17,12 @@ use yii\web\IdentityInterface;
  * @property string $password_reset_token
  * @property string $verification_token
  * @property string $email
+ * @property string|null $name
+ * @property string|null $avatar_path
+ * @property string|null $about
+ * @property string|null $gender
+ * @property string|null $birth_date
+ * @property int|null $is_public
  * @property string $auth_key
  * @property integer $status
  * @property integer $created_at
@@ -56,6 +62,12 @@ class User extends ActiveRecord implements IdentityInterface
         return [
             ['status', 'default', 'value' => self::STATUS_INACTIVE],
             ['status', 'in', 'range' => [self::STATUS_ACTIVE, self::STATUS_INACTIVE, self::STATUS_DELETED]],
+            [['name'], 'string', 'max' => 255],
+            [['about'], 'string', 'max' => 400],
+            [['gender'], 'in', 'range' => ['m', 'f']],
+            [['birth_date'], 'date', 'format' => 'php:Y-m-d'],
+            [['avatar_path'], 'string', 'max' => 255],
+            [['is_public'], 'boolean'],
         ];
     }
 
