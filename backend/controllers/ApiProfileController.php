@@ -60,9 +60,9 @@ class ApiProfileController extends Controller
             $data = $request->getBodyParams();
         }
 
-        if (empty($data) && $request->getIsPatch()) {
+        if ($request->getIsPatch()) {
             $contentType = (string)$request->getHeaders()->get('Content-Type', '');
-            if (stripos($contentType, 'application/x-www-form-urlencoded') !== false) {
+            if (stripos($contentType, 'application/x-www-form-urlencoded') !== false && empty($data)) {
                 $rawBody = $request->getRawBody();
                 if ($rawBody !== '') {
                     parse_str($rawBody, $data);
@@ -71,12 +71,10 @@ class ApiProfileController extends Controller
                 $rawBody = $request->getRawBody();
                 if ($rawBody !== '') {
                     $parsed = $this->parseMultipartFormData($rawBody, $contentType);
-                    $data = $parsed['fields'];
+                    if (empty($data)) {
+                        $data = $parsed['fields'];
+                    }
                     $uploadedFiles = $parsed['files'];
-                } else {
-                    throw new BadRequestHttpException(
-                        'PATCH multipart/form-data is not supported. Use POST for multipart requests.'
-                    );
                 }
             }
         }
@@ -120,6 +118,11 @@ class ApiProfileController extends Controller
         $file = UploadedFile::getInstanceByName('avatar');
         if ($file === null && isset($uploadedFiles['avatar'])) {
             $file = $this->buildUploadedFile($uploadedFiles['avatar']);
+        }
+        if (empty($data) && $file === null) {
+            throw new BadRequestHttpException(
+                'Empty profile update payload. Use JSON or x-www-form-urlencoded for PATCH, or POST for multipart data.'
+            );
         }
         if ($file !== null) {
             $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp'];
@@ -212,7 +215,7 @@ class ApiProfileController extends Controller
                 continue;
             }
 
-            $sections = preg_split("/\r\n\r\n/", $part, 2);
+            $sections = preg_split("/\r\n\r\n|\n\n/", $part, 2);
             if (!$sections || count($sections) < 2) {
                 continue;
             }
@@ -220,7 +223,7 @@ class ApiProfileController extends Controller
             $content = rtrim($content, "\r\n");
 
             $headers = [];
-            foreach (preg_split("/\r\n/", $rawHeaders) as $headerLine) {
+            foreach (preg_split("/\r\n|\n/", $rawHeaders) as $headerLine) {
                 if (strpos($headerLine, ':') === false) {
                     continue;
                 }
