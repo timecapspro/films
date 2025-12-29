@@ -50,10 +50,12 @@ class ApiUsersController extends Controller
             ->where(['u.status' => User::STATUS_ACTIVE, 'u.is_public' => 1]);
 
         if (!empty($q)) {
+            $normalized = ltrim(trim((string)$q), '@');
+            $normalized = mb_strtolower($normalized);
             $query->andWhere([
                 'or',
-                ['like', 'username', $q],
-                ['like', 'name', $q],
+                ['like', new Expression('LOWER(username)'), $normalized],
+                ['like', new Expression('LOWER(name)'), $normalized],
             ]);
         }
 
@@ -72,6 +74,7 @@ class ApiUsersController extends Controller
         $page = max((int)$request->get('page', 1), 1);
         $pageSize = (int)$request->get('pageSize', 12);
         $pageSize = $pageSize > 0 ? $pageSize : 12;
+        $pageSize = min($pageSize, 100);
         $sort = $request->get('sort', 'added_desc');
         $q = $request->get('q');
 

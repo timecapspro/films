@@ -560,7 +560,7 @@ return [
         '/api/movies/{id}/move' => [
             'post' => [
                 'tags' => ['Movies'],
-                'summary' => 'Переместить фильм между списками',
+                'summary' => 'Переместить фильм в список "Позже"',
                 'security' => [
                     ['bearerAuth' => []],
                 ],
@@ -570,20 +570,6 @@ return [
                         'in' => 'path',
                         'required' => true,
                         'schema' => ['type' => 'string'],
-                    ],
-                ],
-                'requestBody' => [
-                    'required' => true,
-                    'content' => [
-                        'application/json' => [
-                            'schema' => [
-                                'type' => 'object',
-                                'properties' => [
-                                    'toList' => ['type' => 'string', 'enum' => ['my', 'later']],
-                                ],
-                                'required' => ['toList'],
-                            ],
-                        ],
                     ],
                 ],
                 'responses' => [
@@ -654,7 +640,7 @@ return [
         '/api/movies/duplicates/check' => [
             'post' => [
                 'tags' => ['Movies'],
-                'summary' => 'Проверить дубликаты по названию',
+                'summary' => 'Проверить дубликаты по названию и году',
                 'security' => [
                     ['bearerAuth' => []],
                 ],
@@ -666,10 +652,10 @@ return [
                                 'type' => 'object',
                                 'properties' => [
                                     'title' => ['type' => 'string'],
-                                    'year' => ['type' => 'integer', 'nullable' => true],
+                                    'year' => ['type' => 'integer'],
                                     'excludeId' => ['type' => 'string', 'nullable' => true],
                                 ],
-                                'required' => ['title'],
+                                'required' => ['title', 'year'],
                             ],
                         ],
                     ],
