@@ -54,6 +54,11 @@ class User extends ActiveRecord implements IdentityInterface
         ];
     }
 
+    public function attributes()
+    {
+        return array_merge(parent::attributes(), ['movies_count']);
+    }
+
     /**
      * {@inheritdoc}
      */
