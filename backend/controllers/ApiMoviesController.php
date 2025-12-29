@@ -716,10 +716,7 @@ class ApiMoviesController extends Controller
 
     private function fetchKinopoiskFilm(int $kinopoiskId): ?array
     {
-        $apiKey = (string)(Yii::$app->params['kinopoiskApiKey'] ?? '');
-        if ($apiKey === '') {
-            $apiKey = (string)(getenv('KINOPOISK_API_KEY') ?: '');
-        }
+        $apiKey = $this->resolveKinopoiskApiKey();
         if ($apiKey === '') {
             Yii::$app->response->statusCode = 500;
             return null;
@@ -785,5 +782,38 @@ class ApiMoviesController extends Controller
         }, $genres);
         $names = array_filter($names, static fn($name) => $name !== '');
         return implode(', ', $names);
+    }
+
+    private function resolveKinopoiskApiKey(): string
+    {
+        $apiKey = (string)(Yii::$app->params['kinopoiskApiKey'] ?? '');
+        if ($apiKey !== '') {
+            return $apiKey;
+        }
+
+        $apiKey = (string)(getenv('KINOPOISK_API_KEY') ?: '');
+        if ($apiKey !== '') {
+            return $apiKey;
+        }
+
+        $consoleParams = $this->loadParamsFile('@console/config/params-local.php');
+        $apiKey = (string)($consoleParams['kinopoiskApiKey'] ?? '');
+        if ($apiKey !== '') {
+            return $apiKey;
+        }
+
+        $commonParams = $this->loadParamsFile('@common/config/params-local.php');
+        return (string)($commonParams['kinopoiskApiKey'] ?? '');
+    }
+
+    private function loadParamsFile(string $alias): array
+    {
+        $path = Yii::getAlias($alias);
+        if (!is_file($path)) {
+            return [];
+        }
+
+        $params = require $path;
+        return is_array($params) ? $params : [];
     }
 }
