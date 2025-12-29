@@ -321,12 +321,18 @@ class ApiMoviesController extends Controller
             }
         }
 
-        $film = $this->fetchKinopoiskFilm($parsedUrl['id']);
+        $apiStatus = 200;
+        $film = $this->fetchKinopoiskFilm($parsedUrl['id'], $apiStatus);
         if ($film === null) {
-            if (Yii::$app->response->statusCode === 500) {
+            if ($apiStatus === 0) {
+                Yii::$app->response->statusCode = 500;
                 return ['message' => 'Kinopoisk API key is not configured.'];
             }
-            throw new NotFoundHttpException('Movie not found.');
+            if ($apiStatus === 404) {
+                throw new NotFoundHttpException('Movie not found.');
+            }
+            Yii::$app->response->statusCode = 500;
+            return ['message' => 'Kinopoisk API request failed.'];
         }
 
         $title = $this->pickTitle($film);
@@ -701,7 +707,15 @@ class ApiMoviesController extends Controller
 
     private function parseKinopoiskUrl(string $url): ?array
     {
-        if (preg_match('~^https?://(?:www\\.)?kinopoisk\\.ru/(film|series)/(\\d+)/?~', $url, $matches)) {
+        $parts = parse_url($url);
+        if (!is_array($parts) || empty($parts['host']) || empty($parts['path'])) {
+            return null;
+        }
+        if (!preg_match('~(^|\\.)kinopoisk\\.ru$~', $parts['host'])) {
+            return null;
+        }
+
+        if (preg_match('~/(film|series)/(\\d+)~', $parts['path'], $matches)) {
             $type = $matches[1];
             $id = (int)$matches[2];
             return [
@@ -714,24 +728,32 @@ class ApiMoviesController extends Controller
         return null;
     }
 
-    private function fetchKinopoiskFilm(int $kinopoiskId): ?array
+    private function fetchKinopoiskFilm(int $kinopoiskId, int &$status): ?array
     {
         $apiKey = $this->resolveKinopoiskApiKey();
         if ($apiKey === '') {
-            Yii::$app->response->statusCode = 500;
+            $status = 0;
             return null;
         }
 
         $response = $this->kinopoiskApiGet(
             $apiKey,
             'https://kinopoiskapiunofficial.tech',
-            "/api/v2.2/films/{$kinopoiskId}"
+            "/api/v2.2/films/{$kinopoiskId}",
+            [],
+            $status
         );
 
         return $response ?: null;
     }
 
-    private function kinopoiskApiGet(string $apiKey, string $baseUrl, string $url, array $params = []): ?array
+    private function kinopoiskApiGet(
+        string $apiKey,
+        string $baseUrl,
+        string $url,
+        array $params = [],
+        int &$status = 0
+    ): ?array
     {
         $requestUrl = rtrim($baseUrl, '/') . $url;
         if (!empty($params)) {
@@ -743,6 +765,7 @@ class ApiMoviesController extends Controller
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER => [
                 'X-API-KEY: ' . $apiKey,
+                'Content-Type: application/json',
             ],
             CURLOPT_TIMEOUT => 20,
         ]);
