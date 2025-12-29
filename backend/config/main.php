@@ -53,6 +53,7 @@ return [
                 'GET api/me' => 'api-auth/me',
                 'GET api/profile' => 'api-profile/view',
                 'PATCH api/profile' => 'api-profile/update',
+                'POST api/profile' => 'api-profile/update',
                 'GET api/movies' => 'api-movies/index',
                 'GET api/movies/export.csv' => 'api-movies/export',
                 'GET api/movies/<id>' => 'api-movies/view',

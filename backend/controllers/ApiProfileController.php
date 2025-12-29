@@ -52,7 +52,32 @@ class ApiProfileController extends Controller
     {
         /** @var User $user */
         $user = Yii::$app->user->identity;
-        $data = Yii::$app->request->post();
+        $request = Yii::$app->request;
+        $data = $request->post();
+        $uploadedFiles = [];
+
+        if (empty($data) && $request->getIsPatch()) {
+            $data = $request->getBodyParams();
+        }
+
+        if ($request->getIsPatch()) {
+            $contentType = (string)$request->getHeaders()->get('Content-Type', '');
+            if (stripos($contentType, 'application/x-www-form-urlencoded') !== false && empty($data)) {
+                $rawBody = $request->getRawBody();
+                if ($rawBody !== '') {
+                    parse_str($rawBody, $data);
+                }
+            } elseif (stripos($contentType, 'multipart/form-data') !== false) {
+                $rawBody = $request->getRawBody();
+                if ($rawBody !== '') {
+                    $parsed = $this->parseMultipartFormData($rawBody, $contentType);
+                    if (empty($data)) {
+                        $data = $parsed['fields'];
+                    }
+                    $uploadedFiles = $parsed['files'];
+                }
+            }
+        }
         $errors = [];
 
         if (array_key_exists('name', $data)) {
@@ -91,6 +116,14 @@ class ApiProfileController extends Controller
         }
 
         $file = UploadedFile::getInstanceByName('avatar');
+        if ($file === null && isset($uploadedFiles['avatar'])) {
+            $file = $this->buildUploadedFile($uploadedFiles['avatar']);
+        }
+        if (empty($data) && $file === null) {
+            throw new BadRequestHttpException(
+                'Empty profile update payload. Use JSON or x-www-form-urlencoded for PATCH, or POST for multipart data.'
+            );
+        }
         if ($file !== null) {
             $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp'];
             $extension = strtolower($file->getExtension());
@@ -160,6 +193,88 @@ class ApiProfileController extends Controller
     private function normalizeBool($value): bool
     {
         return $value === '1' || $value === 1 || $value === true;
+    }
+
+    private function parseMultipartFormData(string $body, string $contentType): array
+    {
+        $boundary = '';
+        if (preg_match('/boundary=(?:"([^"]+)"|([^;]+))/i', $contentType, $matches)) {
+            $boundary = $matches[1] !== '' ? $matches[1] : $matches[2];
+        }
+        $boundary = trim($boundary);
+        if ($boundary === '') {
+            return ['fields' => [], 'files' => []];
+        }
+
+        $fields = [];
+        $files = [];
+        $parts = explode('--' . $boundary, $body);
+        foreach ($parts as $part) {
+            $part = ltrim($part, "\r\n");
+            if ($part === '' || $part === '--' || $part === "--\r\n") {
+                continue;
+            }
+
+            $sections = preg_split("/\r\n\r\n|\n\n/", $part, 2);
+            if (!$sections || count($sections) < 2) {
+                continue;
+            }
+            [$rawHeaders, $content] = $sections;
+            $content = rtrim($content, "\r\n");
+
+            $headers = [];
+            foreach (preg_split("/\r\n|\n/", $rawHeaders) as $headerLine) {
+                if (strpos($headerLine, ':') === false) {
+                    continue;
+                }
+                [$name, $value] = explode(':', $headerLine, 2);
+                $headers[strtolower(trim($name))] = trim($value);
+            }
+
+            if (!isset($headers['content-disposition'])) {
+                continue;
+            }
+
+            $disposition = $headers['content-disposition'];
+            if (!preg_match('/name="([^"]+)"/i', $disposition, $nameMatch)) {
+                continue;
+            }
+            $fieldName = $nameMatch[1];
+
+            if (preg_match('/filename="([^"]*)"/i', $disposition, $fileMatch)) {
+                $filename = $fileMatch[1];
+                if ($filename === '') {
+                    continue;
+                }
+                $tempName = tempnam(sys_get_temp_dir(), 'patch_upload_');
+                if ($tempName === false) {
+                    continue;
+                }
+                file_put_contents($tempName, $content);
+                $files[$fieldName] = [
+                    'name' => $filename,
+                    'type' => $headers['content-type'] ?? 'application/octet-stream',
+                    'tempName' => $tempName,
+                    'size' => strlen($content),
+                    'error' => UPLOAD_ERR_OK,
+                ];
+            } else {
+                $fields[$fieldName] = $content;
+            }
+        }
+
+        return ['fields' => $fields, 'files' => $files];
+    }
+
+    private function buildUploadedFile(array $fileData): UploadedFile
+    {
+        return new UploadedFile([
+            'name' => $fileData['name'],
+            'tempName' => $fileData['tempName'],
+            'type' => $fileData['type'],
+            'size' => $fileData['size'],
+            'error' => $fileData['error'],
+        ]);
     }
 
     private function saveAvatar(User $user, UploadedFile $file): string
