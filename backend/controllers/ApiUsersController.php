@@ -46,7 +46,8 @@ class ApiUsersController extends Controller
         $q = Yii::$app->request->get('q');
 
         $query = User::find()
-            ->where(['status' => User::STATUS_ACTIVE, 'is_public' => 1]);
+            ->alias('u')
+            ->where(['u.status' => User::STATUS_ACTIVE, 'u.is_public' => 1]);
 
         if (!empty($q)) {
             $query->andWhere([
@@ -57,9 +58,9 @@ class ApiUsersController extends Controller
         }
 
         $query->addSelect([
-            '{{%user}}.*',
+            'u.*',
             'movies_count' => new Expression(
-                '(SELECT COUNT(*) FROM {{%movie}} m WHERE m.user_id = {{%user}}.id AND m.list <> :deleted)',
+                '(SELECT COUNT(*) FROM {{%movie}} m WHERE m.user_id = u.id AND m.list <> :deleted)',
                 [':deleted' => Movie::LIST_DELETED]
             ),
         ]);
