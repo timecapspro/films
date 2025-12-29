@@ -66,6 +66,7 @@ return [
                 'POST api/movies/<id>/move' => 'api-movies/move',
                 'POST api/movies/<id>/restore' => 'api-movies/restore',
                 'POST api/movies/duplicates/check' => 'api-movies/duplicates-check',
+                'GET api/tabs/counts' => 'api-tabs/counts',
                 'GET api/users' => 'api-users/index',
                 'GET api/users/<userId>/movies/<movieId>' => 'api-users/movie',
                 'GET api/users/<userId>/movies' => 'api-users/movies',
