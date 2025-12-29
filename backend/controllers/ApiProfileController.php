@@ -315,7 +315,7 @@ class ApiProfileController extends Controller
         $filename = 'user-' . $user->id . '-' . Yii::$app->security->generateRandomString(12) . '.' . $extension;
         $path = $uploadDir . DIRECTORY_SEPARATOR . $filename;
 
-        $saved = $file->saveAs($path);
+        $saved = $this->saveUploadedFile($file, $path);
         if (!$saved || !is_file($path)) {
             throw new \RuntimeException('Failed to save avatar file.');
         }
@@ -333,5 +333,19 @@ class ApiProfileController extends Controller
         if (is_file($fullPath)) {
             @unlink($fullPath);
         }
+    }
+
+    private function saveUploadedFile(UploadedFile $file, string $path): bool
+    {
+        if (is_uploaded_file($file->tempName)) {
+            return $file->saveAs($path);
+        }
+
+        $saved = $file->saveAs($path, false);
+        if (is_file($file->tempName)) {
+            @unlink($file->tempName);
+        }
+
+        return $saved;
     }
 }
