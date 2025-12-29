@@ -62,10 +62,22 @@ class ApiProfileController extends Controller
 
         if (empty($data) && $request->getIsPatch()) {
             $contentType = (string)$request->getHeaders()->get('Content-Type', '');
-            if (stripos($contentType, 'multipart/form-data') !== false) {
-                $parsed = $this->parseMultipartFormData($request->getRawBody(), $contentType);
-                $data = $parsed['fields'];
-                $uploadedFiles = $parsed['files'];
+            if (stripos($contentType, 'application/x-www-form-urlencoded') !== false) {
+                $rawBody = $request->getRawBody();
+                if ($rawBody !== '') {
+                    parse_str($rawBody, $data);
+                }
+            } elseif (stripos($contentType, 'multipart/form-data') !== false) {
+                $rawBody = $request->getRawBody();
+                if ($rawBody !== '') {
+                    $parsed = $this->parseMultipartFormData($rawBody, $contentType);
+                    $data = $parsed['fields'];
+                    $uploadedFiles = $parsed['files'];
+                } else {
+                    throw new BadRequestHttpException(
+                        'PATCH multipart/form-data is not supported. Use POST for multipart requests.'
+                    );
+                }
             }
         }
         $errors = [];
