@@ -3,6 +3,7 @@
 namespace backend\controllers;
 
 use common\models\Movie;
+use common\models\User;
 use Yii;
 use yii\db\Expression;
 use backend\components\JwtAuthFilter;
@@ -44,6 +45,8 @@ class ApiMoviesController extends Controller
                     'restore' => ['post'],
                     'duplicates-check' => ['post'],
                     'export' => ['get'],
+                    'import-kinopoisk' => ['post'],
+                    'copy' => ['post'],
                 ],
             ],
         ]);
@@ -291,6 +294,139 @@ class ApiMoviesController extends Controller
         return $csv;
     }
 
+    public function actionImportKinopoisk()
+    {
+        $data = Yii::$app->request->bodyParams;
+        $list = $data['list'] ?? null;
+        if (!in_array($list, [Movie::LIST_MY, Movie::LIST_LATER], true)) {
+            throw new BadRequestHttpException('Invalid list.');
+        }
+
+        $kinopoiskUrl = isset($data['kinopoiskUrl']) ? trim((string)$data['kinopoiskUrl']) : '';
+        if ($kinopoiskUrl === '') {
+            throw new BadRequestHttpException('kinopoiskUrl is required.');
+        }
+
+        $parsedUrl = $this->parseKinopoiskUrl($kinopoiskUrl);
+        if ($parsedUrl === null) {
+            throw new BadRequestHttpException('Invalid kinopoiskUrl.');
+        }
+
+        $watched = $this->normalizeBool($data['watched'] ?? false);
+        $rating = $data['rating'] ?? null;
+        $watchedAt = $data['watchedAt'] ?? null;
+        if ($watched) {
+            if ($rating === null || $watchedAt === null || $watchedAt === '') {
+                throw new BadRequestHttpException('rating and watchedAt are required when watched.');
+            }
+        }
+
+        $film = $this->fetchKinopoiskFilm($parsedUrl['id']);
+        if ($film === null) {
+            if (Yii::$app->response->statusCode === 500) {
+                return ['message' => 'Kinopoisk API key is not configured.'];
+            }
+            throw new NotFoundHttpException('Movie not found.');
+        }
+
+        $title = $this->pickTitle($film);
+        if ($title === '') {
+            throw new NotFoundHttpException('Movie not found.');
+        }
+
+        $year = $this->normalizeInt($film['year'] ?? null);
+        $duplicates = $this->findDuplicates($title, $year, null, true);
+        if (!empty($duplicates)) {
+            Yii::$app->response->statusCode = 409;
+            return ['duplicates' => $duplicates];
+        }
+
+        $movie = new Movie();
+        $movie->user_id = Yii::$app->user->id;
+        $movie->list = $list;
+        $movie->title = $title;
+        $movie->year = $year;
+        $movie->runtime_min = $this->normalizeInt($film['filmLength'] ?? null);
+        $movie->genres_csv = $this->formatGenres($film['genres'] ?? []);
+        $movie->description = $film['description'] ?? $film['shortDescription'] ?? null;
+        $movie->notes = isset($data['notes']) ? trim((string)$data['notes']) : null;
+        $movie->watched = $watched;
+        if ($watched) {
+            $movie->rating = $this->normalizeInt($rating);
+            $movie->watched_at = (string)$watchedAt;
+        } else {
+            $movie->rating = null;
+            $movie->watched_at = null;
+        }
+        $movie->url = $parsedUrl['url'];
+
+        $posterUrl = $film['posterUrl'] ?? null;
+        if (!empty($posterUrl)) {
+            if (!$movie->id) {
+                $movie->id = Yii::$app->security->generateRandomString(32);
+            }
+            $posterPath = $this->downloadPoster($movie->id, $posterUrl);
+            if ($posterPath !== null) {
+                $movie->poster_path = $posterPath;
+            }
+        }
+
+        if (!$movie->save()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $movie->getErrors()];
+        }
+
+        return ['movie' => $this->serializeMovie($movie)];
+    }
+
+    public function actionCopy()
+    {
+        $data = Yii::$app->request->bodyParams;
+        $movieId = $data['movieId'] ?? null;
+        $fromUserId = $data['fromUserId'] ?? null;
+
+        if (!$movieId || !$fromUserId) {
+            throw new BadRequestHttpException('movieId and fromUserId are required.');
+        }
+
+        $sourceUser = User::findOne(['id' => $fromUserId, 'status' => User::STATUS_ACTIVE, 'is_public' => 1]);
+        if ($sourceUser === null) {
+            throw new NotFoundHttpException('User not found.');
+        }
+
+        $sourceMovie = Movie::findOne(['id' => $movieId, 'user_id' => $fromUserId]);
+        if ($sourceMovie === null || $sourceMovie->list === Movie::LIST_DELETED) {
+            throw new NotFoundHttpException('Movie not found.');
+        }
+
+        if ($this->hasDuplicateForUser(Yii::$app->user->id, $sourceMovie->title, $sourceMovie->year)) {
+            Yii::$app->response->statusCode = 409;
+            return ['message' => 'Duplicate movie'];
+        }
+
+        $movie = new Movie();
+        $movie->user_id = Yii::$app->user->id;
+        $movie->list = Movie::LIST_MY;
+        $movie->title = $sourceMovie->title;
+        $movie->year = $sourceMovie->year;
+        $movie->runtime_min = $sourceMovie->runtime_min;
+        $movie->genres_csv = $sourceMovie->genres_csv;
+        $movie->description = $sourceMovie->description;
+        $movie->notes = null;
+        $movie->watched = false;
+        $movie->rating = null;
+        $movie->watched_at = null;
+        $movie->poster_path = $sourceMovie->poster_path;
+        $movie->url = $sourceMovie->url;
+
+        if (!$movie->save()) {
+            Yii::$app->response->statusCode = 422;
+            return ['errors' => $movie->getErrors()];
+        }
+
+        return ['ok' => true, 'movieId' => $movie->id];
+    }
+
     private function findMovie($id)
     {
         $movie = Movie::findOne(['id' => $id, 'user_id' => Yii::$app->user->id]);
@@ -352,6 +488,11 @@ class ApiMoviesController extends Controller
             return null;
         }
         return (int)$value;
+    }
+
+    private function normalizeBool($value): bool
+    {
+        return $value === '1' || $value === 1 || $value === true;
     }
 
     private function applySort($query, string $sort, string $list): void
@@ -482,6 +623,29 @@ class ApiMoviesController extends Controller
         return 'uploads/posters/' . $filename;
     }
 
+    private function downloadPoster(string $movieId, string $posterUrl): ?string
+    {
+        $posterDir = Yii::getAlias('@backend/web/uploads/posters');
+        FileHelper::createDirectory($posterDir, 0777, true);
+
+        $extension = pathinfo(parse_url($posterUrl, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION);
+        $extension = $extension ?: 'jpg';
+        $filename = $movieId . '.' . $extension;
+        $fullPath = $posterDir . DIRECTORY_SEPARATOR . $filename;
+
+        $data = @file_get_contents($posterUrl);
+        if ($data === false) {
+            return null;
+        }
+
+        $saved = file_put_contents($fullPath, $data);
+        if ($saved === false) {
+            return null;
+        }
+
+        return 'uploads/posters/' . $filename;
+    }
+
     private function deletePosterFile(?string $posterPath): void
     {
         if (!$posterPath) {
@@ -519,5 +683,104 @@ class ApiMoviesController extends Controller
                 'list' => $movie->list,
             ];
         }, $query->all());
+    }
+
+    private function hasDuplicateForUser(int $userId, string $title, $year): bool
+    {
+        $query = Movie::find()
+            ->where(['user_id' => $userId])
+            ->andWhere(['<>', 'list', Movie::LIST_DELETED])
+            ->andWhere(['=', new Expression('LOWER(title)'), mb_strtolower($title)]);
+
+        if ($year !== null && $year !== '') {
+            $query->andWhere(['year' => (int)$year]);
+        }
+
+        return $query->exists();
+    }
+
+    private function parseKinopoiskUrl(string $url): ?array
+    {
+        if (preg_match('~^https?://(?:www\\.)?kinopoisk\\.ru/(film|series)/(\\d+)/?~', $url, $matches)) {
+            $type = $matches[1];
+            $id = (int)$matches[2];
+            return [
+                'type' => $type,
+                'id' => $id,
+                'url' => "https://www.kinopoisk.ru/{$type}/{$id}/",
+            ];
+        }
+
+        return null;
+    }
+
+    private function fetchKinopoiskFilm(int $kinopoiskId): ?array
+    {
+        $apiKey = (string)(Yii::$app->params['kinopoiskApiKey'] ?? '');
+        if ($apiKey === '') {
+            Yii::$app->response->statusCode = 500;
+            return null;
+        }
+
+        $response = $this->kinopoiskApiGet(
+            $apiKey,
+            'https://kinopoiskapiunofficial.tech',
+            "/api/v2.2/films/{$kinopoiskId}"
+        );
+
+        return $response ?: null;
+    }
+
+    private function kinopoiskApiGet(string $apiKey, string $baseUrl, string $url, array $params = []): ?array
+    {
+        $requestUrl = rtrim($baseUrl, '/') . $url;
+        if (!empty($params)) {
+            $requestUrl .= '?' . http_build_query($params);
+        }
+
+        $ch = curl_init($requestUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'X-API-KEY: ' . $apiKey,
+            ],
+            CURLOPT_TIMEOUT => 20,
+        ]);
+        $raw = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($raw === false || $status < 200 || $status >= 300) {
+            return null;
+        }
+
+        $data = json_decode($raw, true);
+        if (!is_array($data)) {
+            return null;
+        }
+
+        return $data;
+    }
+
+    private function pickTitle(array $film): string
+    {
+        foreach (['nameRu', 'nameOriginal', 'nameEn'] as $field) {
+            if (!empty($film[$field])) {
+                return trim((string)$film[$field]);
+            }
+        }
+        return '';
+    }
+
+    private function formatGenres(array $genres): string
+    {
+        if (empty($genres)) {
+            return '';
+        }
+        $names = array_map(function ($genre) {
+            return $genre['genre'] ?? '';
+        }, $genres);
+        $names = array_filter($names, static fn($name) => $name !== '');
+        return implode(', ', $names);
     }
 }
