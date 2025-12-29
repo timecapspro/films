@@ -71,9 +71,7 @@ class ApiProfileController extends Controller
                 $rawBody = $request->getRawBody();
                 if ($rawBody !== '') {
                     $parsed = $this->parseMultipartFormData($rawBody, $contentType);
-                    if (empty($data)) {
-                        $data = $parsed['fields'];
-                    }
+                    $data = array_merge($data, $parsed['fields']);
                     $uploadedFiles = $parsed['files'];
                 }
             }
@@ -127,6 +125,9 @@ class ApiProfileController extends Controller
         if ($file !== null) {
             $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp'];
             $extension = strtolower($file->getExtension());
+            if ($extension === '') {
+                $extension = $this->mapAvatarExtension($file->type);
+            }
             if (!in_array($extension, $allowedExtensions, true)) {
                 throw new BadRequestHttpException('Invalid avatar format.');
             }
@@ -220,6 +221,7 @@ class ApiProfileController extends Controller
                 continue;
             }
             [$rawHeaders, $content] = $sections;
+            $content = ltrim($content, "\r\n");
             $content = rtrim($content, "\r\n");
 
             $headers = [];
@@ -275,6 +277,19 @@ class ApiProfileController extends Controller
             'size' => $fileData['size'],
             'error' => $fileData['error'],
         ]);
+    }
+
+    private function mapAvatarExtension(?string $mimeType): string
+    {
+        $mimeType = strtolower((string)$mimeType);
+        $map = [
+            'image/jpeg' => 'jpg',
+            'image/jpg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+        ];
+
+        return $map[$mimeType] ?? '';
     }
 
     private function saveAvatar(User $user, UploadedFile $file): string
