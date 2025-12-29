@@ -35,6 +35,8 @@ class User extends ActiveRecord implements IdentityInterface
     const STATUS_INACTIVE = 9;
     const STATUS_ACTIVE = 10;
 
+    public $movies_count;
+
 
     /**
      * {@inheritdoc}
@@ -52,6 +54,11 @@ class User extends ActiveRecord implements IdentityInterface
         return [
             TimestampBehavior::class,
         ];
+    }
+
+    public function attributes()
+    {
+        return array_merge(parent::attributes(), ['movies_count']);
     }
 
     /**
