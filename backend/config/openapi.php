@@ -560,7 +560,7 @@ return [
         '/api/movies/{id}/move' => [
             'post' => [
                 'tags' => ['Movies'],
-                'summary' => 'Переместить фильм в список "Позже"',
+                'summary' => 'Переместить фильм между списками',
                 'security' => [
                     ['bearerAuth' => []],
                 ],
@@ -570,6 +570,22 @@ return [
                         'in' => 'path',
                         'required' => true,
                         'schema' => ['type' => 'string'],
+                    ],
+                ],
+                'requestBody' => [
+                    'required' => false,
+                    'content' => [
+                        'application/json' => [
+                            'schema' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'toList' => [
+                                        'type' => 'string',
+                                        'enum' => ['my', 'later'],
+                                    ],
+                                ],
+                            ],
+                        ],
                     ],
                 ],
                 'responses' => [
