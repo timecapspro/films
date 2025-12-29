@@ -175,8 +175,15 @@ class ApiMoviesController extends Controller
     public function actionMove($id)
     {
         $movie = $this->findMovie($id);
-        $movie->list = Movie::LIST_LATER;
+        $data = Yii::$app->request->bodyParams;
+        $toList = $data['toList'] ?? Movie::LIST_LATER;
+        if (!in_array($toList, [Movie::LIST_MY, Movie::LIST_LATER], true)) {
+            throw new BadRequestHttpException('Invalid toList value.');
+        }
+
+        $movie->list = $toList;
         $movie->deleted_from_list = null;
+        $this->setDeletedAt($movie, null);
         $movie->save(false);
 
         return ['ok' => true];
