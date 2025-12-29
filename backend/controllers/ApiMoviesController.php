@@ -718,6 +718,9 @@ class ApiMoviesController extends Controller
     {
         $apiKey = (string)(Yii::$app->params['kinopoiskApiKey'] ?? '');
         if ($apiKey === '') {
+            $apiKey = (string)(getenv('KINOPOISK_API_KEY') ?: '');
+        }
+        if ($apiKey === '') {
             Yii::$app->response->statusCode = 500;
             return null;
         }
