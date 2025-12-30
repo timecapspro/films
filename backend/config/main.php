@@ -76,6 +76,7 @@ return [
                 'GET api/users' => 'api-users/index',
                 'GET api/users/<userId>/movies/<movieId>' => 'api-users/movie',
                 'GET api/users/<userId>/movies' => 'api-users/movies',
+                'GET api/users/<userId>/movies/filters' => 'api-users/movies-filters',
                 'docs' => 'docs/index',
                 'docs/json' => 'docs/json',
             ],

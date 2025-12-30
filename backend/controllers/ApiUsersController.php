@@ -4,6 +4,7 @@ namespace backend\controllers;
 
 use backend\components\JwtAuthFilter;
 use common\models\Movie;
+use common\models\Tag;
 use common\models\User;
 use Yii;
 use yii\db\Expression;
@@ -36,6 +37,7 @@ class ApiUsersController extends Controller
                     'index' => ['get'],
                     'movies' => ['get'],
                     'movie' => ['get'],
+                    'movies-filters' => ['get'],
                 ],
             ],
         ]);
@@ -77,6 +79,10 @@ class ApiUsersController extends Controller
         $pageSize = min($pageSize, 100);
         $sort = $request->get('sort', 'added_desc');
         $q = $request->get('q');
+        $yearFrom = $this->normalizeInt($request->get('yearFrom'));
+        $yearTo = $this->normalizeInt($request->get('yearTo'));
+        $genres = $this->parseCsvParam($request->get('genres'));
+        $tagIds = $this->parseCsvParam($request->get('tags'));
 
         $query = Movie::find()
             ->where(['user_id' => $user->id])
@@ -89,6 +95,28 @@ class ApiUsersController extends Controller
                 ['like', 'description', $q],
                 ['like', 'notes', $q],
             ]);
+        }
+
+        if ($yearFrom !== null) {
+            $query->andWhere(['>=', 'year', $yearFrom]);
+        }
+
+        if ($yearTo !== null) {
+            $query->andWhere(['<=', 'year', $yearTo]);
+        }
+
+        if (!empty($genres)) {
+            $genreConditions = ['or'];
+            foreach ($genres as $genre) {
+                $genreConditions[] = ['like', 'genres_csv', $genre];
+            }
+            $query->andWhere($genreConditions);
+        }
+
+        if (!empty($tagIds)) {
+            $query->joinWith('movieTags mt', false)
+                ->andWhere(['mt.tag_id' => $tagIds])
+                ->distinct();
         }
 
         $this->applySort($query, $sort);
@@ -114,6 +142,61 @@ class ApiUsersController extends Controller
         }
 
         return ['movie' => $this->serializeMovie($movie)];
+    }
+
+    public function actionMoviesFilters($userId)
+    {
+        $user = $this->findPublicUser($userId);
+        $moviesQuery = Movie::find()
+            ->where(['user_id' => $user->id])
+            ->andWhere(['<>', 'list', Movie::LIST_DELETED]);
+
+        $years = (clone $moviesQuery)
+            ->select(['year'])
+            ->andWhere(['not', ['year' => null]])
+            ->column();
+
+        $yearMin = null;
+        $yearMax = null;
+        if (!empty($years)) {
+            $yearMin = min($years);
+            $yearMax = max($years);
+        }
+
+        $genres = [];
+        foreach ((clone $moviesQuery)->select(['genres_csv'])->column() as $csv) {
+            if (!$csv) {
+                continue;
+            }
+            foreach (explode(',', $csv) as $genre) {
+                $genre = trim($genre);
+                if ($genre !== '') {
+                    $genres[$genre] = true;
+                }
+            }
+        }
+
+        $tagQuery = Tag::find()
+            ->alias('t')
+            ->select(['t.id', 't.name', 't.color'])
+            ->innerJoin('movie_tag mt', 'mt.tag_id = t.id')
+            ->innerJoin('movie m', 'm.id = mt.movie_id')
+            ->where(['t.user_id' => $user->id, 'm.user_id' => $user->id])
+            ->andWhere(['<>', 'm.list', Movie::LIST_DELETED])
+            ->distinct()
+            ->orderBy(['t.name' => SORT_ASC])
+            ->asArray()
+            ->all();
+
+        $genreList = array_values(array_keys($genres));
+        sort($genreList, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return [
+            'genres' => $genreList,
+            'tags' => array_map([$this, 'serializeTagRow'], $tagQuery),
+            'yearMin' => $yearMin === null ? null : (int)$yearMin,
+            'yearMax' => $yearMax === null ? null : (int)$yearMax,
+        ];
     }
 
     private function findPublicUser($userId): User
@@ -238,6 +321,43 @@ class ApiUsersController extends Controller
         }
 
         return Url::to('@web/' . $user->avatar_path, true);
+    }
+
+    private function normalizeInt($value)
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        return (int)$value;
+    }
+
+    private function parseCsvParam($value): array
+    {
+        if ($value === null || $value === '') {
+            return [];
+        }
+        if (is_array($value)) {
+            $items = $value;
+        } else {
+            $items = explode(',', (string)$value);
+        }
+        $result = [];
+        foreach ($items as $item) {
+            $item = trim((string)$item);
+            if ($item !== '') {
+                $result[$item] = true;
+            }
+        }
+        return array_keys($result);
+    }
+
+    private function serializeTagRow(array $row): array
+    {
+        return [
+            'id' => $row['id'],
+            'name' => $row['name'],
+            'color' => $row['color'],
+        ];
     }
 
     private function getPosterUrl(Movie $movie): ?string
