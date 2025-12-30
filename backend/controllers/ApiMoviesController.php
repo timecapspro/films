@@ -3,6 +3,8 @@
 namespace backend\controllers;
 
 use common\models\Movie;
+use common\models\MovieTag;
+use common\models\Tag;
 use common\models\User;
 use Yii;
 use yii\db\Expression;
@@ -47,6 +49,7 @@ class ApiMoviesController extends Controller
                     'export' => ['get'],
                     'import-kinopoisk' => ['post'],
                     'copy' => ['post'],
+                    'filters' => ['get'],
                 ],
             ],
         ]);
@@ -65,9 +68,14 @@ class ApiMoviesController extends Controller
         $pageSize = min($pageSize, 100);
         $sort = $request->get('sort', 'added_desc');
         $q = $request->get('q');
+        $yearFrom = $this->normalizeInt($request->get('yearFrom'));
+        $yearTo = $this->normalizeInt($request->get('yearTo'));
+        $genres = $this->parseCsvParam($request->get('genres'));
+        $tagIds = $this->parseCsvParam($request->get('tags'));
 
         $query = Movie::find()
-            ->where(['user_id' => Yii::$app->user->id, 'list' => $list]);
+            ->where(['user_id' => Yii::$app->user->id, 'list' => $list])
+            ->with('tags');
 
         if (!empty($q)) {
             $query->andWhere([
@@ -76,6 +84,28 @@ class ApiMoviesController extends Controller
                 ['like', 'description', $q],
                 ['like', 'notes', $q],
             ]);
+        }
+
+        if ($yearFrom !== null) {
+            $query->andWhere(['>=', 'year', $yearFrom]);
+        }
+
+        if ($yearTo !== null) {
+            $query->andWhere(['<=', 'year', $yearTo]);
+        }
+
+        if (!empty($genres)) {
+            $genreConditions = ['or'];
+            foreach ($genres as $genre) {
+                $genreConditions[] = ['like', 'genres_csv', $genre];
+            }
+            $query->andWhere($genreConditions);
+        }
+
+        if (!empty($tagIds)) {
+            $query->joinWith('movieTags mt', false)
+                ->andWhere(['mt.tag_id' => $tagIds])
+                ->distinct();
         }
 
         $this->applySort($query, $sort, $list);
@@ -122,6 +152,8 @@ class ApiMoviesController extends Controller
             return ['errors' => $movie->getErrors()];
         }
 
+        $this->syncMovieTags($movie, $this->extractTagIds($data));
+
         return ['movie' => $this->serializeMovie($movie)];
     }
 
@@ -148,6 +180,8 @@ class ApiMoviesController extends Controller
             Yii::$app->response->statusCode = 422;
             return ['errors' => $movie->getErrors()];
         }
+
+        $this->syncMovieTags($movie, $this->extractTagIds($data));
 
         return ['movie' => $this->serializeMovie($movie)];
     }
@@ -387,6 +421,8 @@ class ApiMoviesController extends Controller
             return ['errors' => $movie->getErrors()];
         }
 
+        $this->syncMovieTags($movie, $this->extractTagIds($data));
+
         return ['movie' => $this->serializeMovie($movie)];
     }
 
@@ -443,9 +479,69 @@ class ApiMoviesController extends Controller
         return ['ok' => true, 'movieId' => $movie->id];
     }
 
+    public function actionFilters()
+    {
+        $list = Yii::$app->request->get('list', Movie::LIST_MY);
+        if (!in_array($list, [Movie::LIST_MY, Movie::LIST_LATER, Movie::LIST_DELETED], true)) {
+            throw new BadRequestHttpException('Invalid list.');
+        }
+
+        $moviesQuery = Movie::find()
+            ->where(['user_id' => Yii::$app->user->id, 'list' => $list]);
+
+        $years = (clone $moviesQuery)
+            ->select(['year'])
+            ->andWhere(['not', ['year' => null]])
+            ->column();
+
+        $yearMin = null;
+        $yearMax = null;
+        if (!empty($years)) {
+            $yearMin = min($years);
+            $yearMax = max($years);
+        }
+
+        $genres = [];
+        foreach ((clone $moviesQuery)->select(['genres_csv'])->column() as $csv) {
+            if (!$csv) {
+                continue;
+            }
+            foreach (explode(',', $csv) as $genre) {
+                $genre = trim($genre);
+                if ($genre !== '') {
+                    $genres[$genre] = true;
+                }
+            }
+        }
+
+        $tagQuery = Tag::find()
+            ->alias('t')
+            ->select(['t.id', 't.name', 't.color'])
+            ->innerJoin('movie_tag mt', 'mt.tag_id = t.id')
+            ->innerJoin('movie m', 'm.id = mt.movie_id')
+            ->where(['t.user_id' => Yii::$app->user->id, 'm.user_id' => Yii::$app->user->id, 'm.list' => $list])
+            ->distinct()
+            ->orderBy(['t.name' => SORT_ASC])
+            ->asArray()
+            ->all();
+
+        $genreList = array_values(array_keys($genres));
+        sort($genreList, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return [
+            'genres' => $genreList,
+            'tags' => array_map([$this, 'serializeTagRow'], $tagQuery),
+            'yearMin' => $yearMin === null ? null : (int)$yearMin,
+            'yearMax' => $yearMax === null ? null : (int)$yearMax,
+        ];
+    }
+
     private function findMovie($id)
     {
-        $movie = Movie::findOne(['id' => $id, 'user_id' => Yii::$app->user->id]);
+        $movie = Movie::find()
+            ->where(['id' => $id, 'user_id' => Yii::$app->user->id])
+            ->with('tags')
+            ->one();
         if ($movie === null) {
             throw new NotFoundHttpException('Movie not found.');
         }
@@ -575,6 +671,7 @@ class ApiMoviesController extends Controller
             'posterUrl' => $this->getPosterUrl($movie),
             'url' => $movie->url ?? '',
             'addedAt' => $this->formatAddedAt($movie->added_at),
+            'tags' => array_map([$this, 'serializeTag'], $movie->tags),
         ];
     }
 
@@ -837,6 +934,87 @@ class ApiMoviesController extends Controller
         }, $genres);
         $names = array_filter($names, static fn($name) => $name !== '');
         return implode(', ', $names);
+    }
+
+    private function parseCsvParam($value): array
+    {
+        if ($value === null || $value === '') {
+            return [];
+        }
+        if (is_array($value)) {
+            $items = $value;
+        } else {
+            $items = explode(',', (string)$value);
+        }
+        $result = [];
+        foreach ($items as $item) {
+            $item = trim((string)$item);
+            if ($item !== '') {
+                $result[$item] = true;
+            }
+        }
+        return array_keys($result);
+    }
+
+    private function extractTagIds(array $data): ?array
+    {
+        if (array_key_exists('tagIds', $data)) {
+            $ids = $data['tagIds'];
+            if (!is_array($ids)) {
+                return [];
+            }
+            return array_values(array_unique(array_filter(array_map('strval', $ids), 'strlen')));
+        }
+        if (array_key_exists('tagIdsCsv', $data)) {
+            return $this->parseCsvParam($data['tagIdsCsv']);
+        }
+        return null;
+    }
+
+    private function syncMovieTags(Movie $movie, ?array $tagIds): void
+    {
+        if ($tagIds === null) {
+            return;
+        }
+
+        $tagIds = array_values(array_unique($tagIds));
+        if (empty($tagIds)) {
+            MovieTag::deleteAll(['movie_id' => $movie->id]);
+            return;
+        }
+
+        $validTagIds = Tag::find()
+            ->select(['id'])
+            ->where(['user_id' => Yii::$app->user->id])
+            ->andWhere(['id' => $tagIds])
+            ->column();
+
+        MovieTag::deleteAll(['movie_id' => $movie->id]);
+
+        foreach ($validTagIds as $tagId) {
+            $movieTag = new MovieTag();
+            $movieTag->movie_id = $movie->id;
+            $movieTag->tag_id = $tagId;
+            $movieTag->save(false);
+        }
+    }
+
+    private function serializeTag(Tag $tag): array
+    {
+        return [
+            'id' => $tag->id,
+            'name' => $tag->name,
+            'color' => $tag->color,
+        ];
+    }
+
+    private function serializeTagRow(array $row): array
+    {
+        return [
+            'id' => $row['id'],
+            'name' => $row['name'],
+            'color' => $row['color'],
+        ];
     }
 
     private function resolveKinopoiskApiKey(): string
