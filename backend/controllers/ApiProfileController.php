@@ -9,6 +9,7 @@ use yii\filters\ContentNegotiator;
 use yii\filters\VerbFilter;
 use yii\helpers\FileHelper;
 use yii\helpers\Url;
+use yii\validators\EmailValidator;
 use yii\web\BadRequestHttpException;
 use yii\web\Controller;
 use yii\web\Response;
@@ -35,6 +36,7 @@ class ApiProfileController extends Controller
                 'actions' => [
                     'view' => ['get'],
                     'update' => ['patch', 'post'],
+                    'security' => ['patch'],
                 ],
             ],
         ]);
@@ -143,6 +145,58 @@ class ApiProfileController extends Controller
         if (!$user->save()) {
             Yii::$app->response->statusCode = 400;
             return ['errors' => $user->getErrors()];
+        }
+
+        return ['ok' => true];
+    }
+
+    public function actionSecurity()
+    {
+        /** @var User $user */
+        $user = Yii::$app->user->identity;
+        $data = Yii::$app->request->bodyParams;
+
+        $username = array_key_exists('username', $data) ? trim((string)$data['username']) : null;
+        $email = array_key_exists('email', $data) ? trim((string)$data['email']) : null;
+        $currentPassword = isset($data['currentPassword']) ? (string)$data['currentPassword'] : '';
+
+        if ($username === null && $email === null) {
+            Yii::$app->response->statusCode = 400;
+            return ['message' => 'username or email is required.'];
+        }
+
+        if ($currentPassword !== '' && !$user->validatePassword($currentPassword)) {
+            Yii::$app->response->statusCode = 403;
+            return ['message' => 'Invalid current password.'];
+        }
+
+        if ($username !== null) {
+            if (mb_strlen($username) < 3) {
+                Yii::$app->response->statusCode = 400;
+                return ['message' => 'Username is too short.'];
+            }
+            if (User::find()->where(['username' => $username])->andWhere(['<>', 'id', $user->id])->exists()) {
+                Yii::$app->response->statusCode = 409;
+                return ['message' => 'Логин уже занят'];
+            }
+            $user->username = $username;
+        }
+
+        if ($email !== null) {
+            if (!(new EmailValidator())->validate($email)) {
+                Yii::$app->response->statusCode = 400;
+                return ['message' => 'Некорректные данные'];
+            }
+            if (User::find()->where(['email' => $email])->andWhere(['<>', 'id', $user->id])->exists()) {
+                Yii::$app->response->statusCode = 409;
+                return ['message' => 'Email уже зарегистрирован'];
+            }
+            $user->email = $email;
+        }
+
+        if (!$user->save(false)) {
+            Yii::$app->response->statusCode = 400;
+            return ['message' => 'Failed to update security profile.'];
         }
 
         return ['ok' => true];
