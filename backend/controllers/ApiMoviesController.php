@@ -980,22 +980,16 @@ class ApiMoviesController extends Controller
 
     private function extractTagIds(array $data): ?array
     {
-        $candidates = ['tagIds', 'tagIdsCsv', 'tags', 'tagsCsv'];
-        foreach ($candidates as $key) {
-            if (!array_key_exists($key, $data)) {
-                continue;
-            }
-
-            $value = $data[$key];
-            if (is_array($value)) {
-                $ids = array_values(array_unique(array_filter(array_map('strval', $value), 'strlen')));
-                return $ids;
-            }
-
-            return $this->parseCsvParam($value);
+        if (!array_key_exists('tagIds', $data)) {
+            return null;
         }
 
-        return null;
+        $value = $data['tagIds'];
+        if (is_array($value)) {
+            return array_values(array_unique(array_filter(array_map('strval', $value), 'strlen')));
+        }
+
+        return $this->parseCsvParam($value);
     }
 
     private function syncMovieTags(Movie $movie, ?array $tagIds): void
