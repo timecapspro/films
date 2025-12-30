@@ -623,10 +623,72 @@ class ApiMoviesController extends Controller
                 if ($rawBody !== '') {
                     parse_str($rawBody, $data);
                 }
+            } elseif (stripos($contentType, 'multipart/form-data') !== false) {
+                $rawBody = $request->getRawBody();
+                if ($rawBody !== '') {
+                    $parsed = $this->parseMultipartFormData($rawBody, $contentType);
+                    $data = array_merge($data, $parsed);
+                }
             }
         }
 
         return $data;
+    }
+
+    private function parseMultipartFormData(string $body, string $contentType): array
+    {
+        $boundary = '';
+        if (preg_match('/boundary=(?:"([^"]+)"|([^;]+))/i', $contentType, $matches)) {
+            $boundary = $matches[1] !== '' ? $matches[1] : $matches[2];
+        }
+        $boundary = trim($boundary);
+        if ($boundary === '') {
+            return [];
+        }
+
+        $fields = [];
+        $parts = explode('--' . $boundary, $body);
+        foreach ($parts as $part) {
+            $part = ltrim($part, "\r\n");
+            if ($part === '' || $part === '--' || $part === "--\r\n") {
+                continue;
+            }
+
+            $sections = preg_split("/\r\n\r\n|\n\n/", $part, 2);
+            if (!$sections || count($sections) < 2) {
+                continue;
+            }
+            [$rawHeaders, $content] = $sections;
+            $content = ltrim($content, "\r\n");
+            $content = rtrim($content, "\r\n");
+
+            $headers = [];
+            foreach (preg_split("/\r\n|\n/", $rawHeaders) as $headerLine) {
+                if (strpos($headerLine, ':') === false) {
+                    continue;
+                }
+                [$name, $value] = explode(':', $headerLine, 2);
+                $headers[strtolower(trim($name))] = trim($value);
+            }
+
+            if (!isset($headers['content-disposition'])) {
+                continue;
+            }
+
+            $disposition = $headers['content-disposition'];
+            if (!preg_match('/name=\"?([^\";]+)\"?/i', $disposition, $matches)) {
+                continue;
+            }
+            $fieldName = $matches[1];
+
+            if (preg_match('/filename=\"?([^\";]+)\"?/i', $disposition)) {
+                continue;
+            }
+
+            $fields[$fieldName] = $content;
+        }
+
+        return $fields;
     }
 
     private function applySort($query, string $sort, string $list): void
