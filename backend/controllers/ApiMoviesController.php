@@ -134,7 +134,7 @@ class ApiMoviesController extends Controller
         $movie = new Movie();
         $movie->user_id = Yii::$app->user->id;
 
-        $data = Yii::$app->request->bodyParams;
+        $data = $this->getRequestData();
         $this->applyMovieData($movie, $data);
 
         if ($movie->list === Movie::LIST_DELETED) {
@@ -161,7 +161,7 @@ class ApiMoviesController extends Controller
     {
         $movie = $this->findMovie($id);
 
-        $data = Yii::$app->request->bodyParams;
+        $data = $this->getRequestData();
         $this->applyMovieData($movie, $data, true);
 
         $removePoster = isset($data['removePoster']) && $data['removePoster'] === '1';
@@ -605,6 +605,28 @@ class ApiMoviesController extends Controller
     private function normalizeBool($value): bool
     {
         return $value === '1' || $value === 1 || $value === true;
+    }
+
+    private function getRequestData(): array
+    {
+        $request = Yii::$app->request;
+        $data = $request->post();
+
+        if (empty($data) && $request->getIsPatch()) {
+            $data = $request->getBodyParams();
+        }
+
+        if ($request->getIsPatch()) {
+            $contentType = (string)$request->getHeaders()->get('Content-Type', '');
+            if (stripos($contentType, 'application/x-www-form-urlencoded') !== false && empty($data)) {
+                $rawBody = $request->getRawBody();
+                if ($rawBody !== '') {
+                    parse_str($rawBody, $data);
+                }
+            }
+        }
+
+        return $data;
     }
 
     private function applySort($query, string $sort, string $list): void
