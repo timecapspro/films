@@ -23,6 +23,7 @@ use yii\db\ActiveRecord;
  * @property string|null $deleted_from_list
  * @property string $added_at
  * @property string $updated_at
+ * @property Tag[] $tags
  */
 class Movie extends ActiveRecord
 {
@@ -50,6 +51,16 @@ class Movie extends ActiveRecord
             [['added_at', 'updated_at'], 'safe'],
             ['rating', 'validateWatchedRequirements'],
         ];
+    }
+
+    public function getMovieTags()
+    {
+        return $this->hasMany(MovieTag::class, ['movie_id' => 'id']);
+    }
+
+    public function getTags()
+    {
+        return $this->hasMany(Tag::class, ['id' => 'tag_id'])->via('movieTags');
     }
 
     public function validateWatchedRequirements($attribute)
