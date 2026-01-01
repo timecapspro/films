@@ -37,6 +37,7 @@ class ApiNotificationsController extends Controller
                     'index' => ['get'],
                     'status' => ['get'],
                     'read' => ['post'],
+                    'clear' => ['post'],
                     'users' => ['get'],
                 ],
             ],
@@ -126,6 +127,21 @@ class ApiNotificationsController extends Controller
 
     public function actionRead()
     {
+        /** @var User $user */
+        $user = Yii::$app->user->identity;
+        $user->notifications_read_at = gmdate('Y-m-d H:i:s');
+        $user->save(false);
+
+        return ['ok' => true];
+    }
+
+    public function actionClear()
+    {
+        $followedIds = $this->getFollowedUserIds();
+        if (!empty($followedIds)) {
+            Notification::deleteAll(['user_id' => $followedIds]);
+        }
+
         /** @var User $user */
         $user = Yii::$app->user->identity;
         $user->notifications_read_at = gmdate('Y-m-d H:i:s');
