@@ -58,6 +58,7 @@ class ApiMoviesController extends Controller
 
     public function actionIndex()
     {
+        $this->applyNoCacheHeaders();
         $request = Yii::$app->request;
         $list = $request->get('list', Movie::LIST_MY);
         if (!in_array($list, [Movie::LIST_MY, Movie::LIST_LATER, Movie::LIST_DELETED], true)) {
@@ -752,6 +753,14 @@ class ApiMoviesController extends Controller
                 $query->orderBy(['added_at' => SORT_DESC]);
                 break;
         }
+    }
+
+    private function applyNoCacheHeaders(): void
+    {
+        $headers = Yii::$app->response->headers;
+        $headers->set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        $headers->set('Pragma', 'no-cache');
+        $headers->set('Expires', '0');
     }
 
     private function serializeMovie(Movie $movie): array
