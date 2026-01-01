@@ -66,9 +66,6 @@ class Movie extends ActiveRecord
     public function validateWatchedRequirements($attribute)
     {
         if ($this->watched) {
-            if ($this->rating === null) {
-                $this->addError('rating', 'Rating is required when watched.');
-            }
             if ($this->watched_at === null || $this->watched_at === '') {
                 $this->addError('watched_at', 'watchedAt is required when watched.');
             }
