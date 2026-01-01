@@ -359,8 +359,8 @@ class ApiMoviesController extends Controller
         $rating = $data['rating'] ?? null;
         $watchedAt = $data['watchedAt'] ?? null;
         if ($watched) {
-            if ($rating === null || $watchedAt === null || $watchedAt === '') {
-                throw new BadRequestHttpException('rating and watchedAt are required when watched.');
+            if ($watchedAt === null || $watchedAt === '') {
+                throw new BadRequestHttpException('watchedAt is required when watched.');
             }
         }
 
@@ -585,6 +585,8 @@ class ApiMoviesController extends Controller
 
         if (array_key_exists('watched', $data)) {
             $movie->watched = $data['watched'] === '1' || $data['watched'] === 1 || $data['watched'] === true;
+        } elseif (!$isUpdate && $movie->watched === null) {
+            $movie->watched = false;
         }
 
         if (array_key_exists('rating', $data)) {
