@@ -82,6 +82,7 @@ return [
                 'GET api/notifications' => 'api-notifications/index',
                 'GET api/notifications/status' => 'api-notifications/status',
                 'POST api/notifications/read' => 'api-notifications/read',
+                'POST api/notifications/clear' => 'api-notifications/clear',
                 'GET api/notifications/users' => 'api-notifications/users',
                 'docs' => 'docs/index',
                 'docs/json' => 'docs/json',

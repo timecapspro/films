@@ -426,6 +426,7 @@ class ApiMoviesController extends Controller
         }
 
         $this->syncMovieTags($movie, $this->extractTagIds($data));
+        $this->createMovieNotifications($movie, true, null);
 
         return ['movie' => $this->serializeMovie($movie)];
     }
@@ -479,6 +480,8 @@ class ApiMoviesController extends Controller
             Yii::$app->response->statusCode = 422;
             return ['errors' => $movie->getErrors()];
         }
+
+        $this->createMovieNotifications($movie, true, null);
 
         return ['ok' => true, 'movieId' => $movie->id];
     }
