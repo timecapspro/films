@@ -77,7 +77,8 @@ class ApiMoviesController extends Controller
 
         $query = Movie::find()
             ->where(['user_id' => Yii::$app->user->id, 'list' => $list])
-            ->with('tags');
+            ->with('tags')
+            ->useMaster();
 
         if (!empty($q)) {
             $query->andWhere([
