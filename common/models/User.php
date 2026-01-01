@@ -23,6 +23,7 @@ use yii\web\IdentityInterface;
  * @property string|null $gender
  * @property string|null $birth_date
  * @property int|null $is_public
+ * @property string|null $notifications_read_at
  * @property string $auth_key
  * @property integer $status
  * @property integer $created_at
@@ -36,6 +37,7 @@ class User extends ActiveRecord implements IdentityInterface
     const STATUS_ACTIVE = 10;
 
     public $movies_count;
+    public $is_following;
 
 
     /**
@@ -58,7 +60,7 @@ class User extends ActiveRecord implements IdentityInterface
 
     public function attributes()
     {
-        return array_merge(parent::attributes(), ['movies_count']);
+        return array_merge(parent::attributes(), ['movies_count', 'is_following']);
     }
 
     /**

@@ -4,6 +4,7 @@ namespace backend\controllers;
 
 use common\models\Movie;
 use common\models\MovieTag;
+use common\models\Notification;
 use common\models\Tag;
 use common\models\User;
 use Yii;
@@ -153,6 +154,7 @@ class ApiMoviesController extends Controller
         }
 
         $this->syncMovieTags($movie, $this->extractTagIds($data));
+        $this->createMovieNotifications($movie, true, null);
 
         return ['movie' => $this->serializeMovie($movie)];
     }
@@ -160,6 +162,7 @@ class ApiMoviesController extends Controller
     public function actionUpdate($id)
     {
         $movie = $this->findMovie($id);
+        $previousRating = $movie->rating;
 
         $data = $this->getRequestData();
         $this->applyMovieData($movie, $data, true);
@@ -182,6 +185,7 @@ class ApiMoviesController extends Controller
         }
 
         $this->syncMovieTags($movie, $this->extractTagIds($data));
+        $this->createMovieNotifications($movie, false, $previousRating);
 
         return ['movie' => $this->serializeMovie($movie)];
     }
@@ -783,6 +787,35 @@ class ApiMoviesController extends Controller
         }
 
         return gmdate('c', $timestamp);
+    }
+
+    private function createMovieNotifications(Movie $movie, bool $isNew, ?int $previousRating): void
+    {
+        if ($movie->list === Movie::LIST_DELETED) {
+            return;
+        }
+
+        if ($isNew) {
+            $this->createNotification($movie, Notification::ACTION_MOVIE_ADDED, null);
+            if ($movie->rating !== null) {
+                $this->createNotification($movie, Notification::ACTION_MOVIE_RATED, $movie->rating);
+            }
+            return;
+        }
+
+        if ($movie->rating !== null && ($previousRating === null || (int)$previousRating !== (int)$movie->rating)) {
+            $this->createNotification($movie, Notification::ACTION_MOVIE_RATED, $movie->rating);
+        }
+    }
+
+    private function createNotification(Movie $movie, string $action, ?int $rating): void
+    {
+        $notification = new Notification();
+        $notification->user_id = $movie->user_id;
+        $notification->movie_id = $movie->id;
+        $notification->action = $action;
+        $notification->rating = $rating;
+        $notification->save(false);
     }
 
     private function savePoster(Movie $movie, UploadedFile $file): string

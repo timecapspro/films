@@ -6,11 +6,13 @@ use backend\components\JwtAuthFilter;
 use common\models\Movie;
 use common\models\Tag;
 use common\models\User;
+use common\models\UserFollow;
 use Yii;
 use yii\db\Expression;
 use yii\filters\ContentNegotiator;
 use yii\filters\VerbFilter;
 use yii\helpers\Url;
+use yii\web\BadRequestHttpException;
 use yii\web\Controller;
 use yii\web\NotFoundHttpException;
 use yii\web\Response;
@@ -38,6 +40,8 @@ class ApiUsersController extends Controller
                     'movies' => ['get'],
                     'movie' => ['get'],
                     'movies-filters' => ['get'],
+                    'follow' => ['post'],
+                    'unfollow' => ['delete'],
                 ],
             ],
         ]);
@@ -63,6 +67,7 @@ class ApiUsersController extends Controller
 
         $users = $query->orderBy(['username' => SORT_ASC])->all();
         $this->hydrateMoviesCount($users);
+        $this->hydrateFollowing($users);
 
         return [
             'users' => array_map([$this, 'serializeUser'], $users),
@@ -199,6 +204,39 @@ class ApiUsersController extends Controller
         ];
     }
 
+    public function actionFollow($userId)
+    {
+        $currentUserId = (int)Yii::$app->user->id;
+        if ((int)$userId === $currentUserId) {
+            throw new BadRequestHttpException('Cannot follow yourself.');
+        }
+
+        $user = $this->findPublicUser($userId);
+        $exists = UserFollow::find()
+            ->where(['follower_id' => $currentUserId, 'followee_id' => $user->id])
+            ->exists();
+
+        if (!$exists) {
+            $follow = new UserFollow();
+            $follow->follower_id = $currentUserId;
+            $follow->followee_id = $user->id;
+            $follow->created_at = gmdate('Y-m-d H:i:s');
+            $follow->save(false);
+        }
+
+        return ['ok' => true];
+    }
+
+    public function actionUnfollow($userId)
+    {
+        $currentUserId = (int)Yii::$app->user->id;
+        $user = $this->findPublicUser($userId);
+
+        UserFollow::deleteAll(['follower_id' => $currentUserId, 'followee_id' => $user->id]);
+
+        return ['ok' => true];
+    }
+
     private function findPublicUser($userId): User
     {
         $user = User::findOne(['id' => $userId, 'status' => User::STATUS_ACTIVE, 'is_public' => 1]);
@@ -248,6 +286,7 @@ class ApiUsersController extends Controller
             'name' => $user->name ?? '',
             'avatar_url' => $this->getAvatarUrl($user),
             'movies_count' => isset($user->movies_count) ? (int)$user->movies_count : 0,
+            'is_following' => (bool)($user->is_following ?? false),
         ];
     }
 
@@ -270,6 +309,31 @@ class ApiUsersController extends Controller
 
         foreach ($users as $user) {
             $user->movies_count = isset($countsByUser[$user->id]) ? (int)$countsByUser[$user->id] : 0;
+        }
+    }
+
+    private function hydrateFollowing(array $users): void
+    {
+        if (empty($users)) {
+            return;
+        }
+
+        $userId = (int)Yii::$app->user->id;
+        $followedIds = UserFollow::find()
+            ->select(['followee_id'])
+            ->where(['follower_id' => $userId])
+            ->column();
+
+        if (empty($followedIds)) {
+            foreach ($users as $user) {
+                $user->is_following = false;
+            }
+            return;
+        }
+
+        $followedMap = array_fill_keys($followedIds, true);
+        foreach ($users as $user) {
+            $user->is_following = isset($followedMap[$user->id]);
         }
     }
 
