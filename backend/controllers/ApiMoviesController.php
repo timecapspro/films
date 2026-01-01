@@ -74,53 +74,62 @@ class ApiMoviesController extends Controller
         $genres = $this->parseCsvParam($request->get('genres'));
         $tagIds = $this->parseCsvParam($request->get('tags'));
 
-        $query = Movie::find()
-            ->where(['user_id' => Yii::$app->user->id, 'list' => $list])
-            ->with('tags');
+        $buildResponse = function () use ($list, $q, $yearFrom, $yearTo, $genres, $tagIds, $sort, $page, $pageSize) {
+            $query = Movie::find()
+                ->where(['user_id' => Yii::$app->user->id, 'list' => $list])
+                ->with('tags');
 
-        if (!empty($q)) {
-            $query->andWhere([
-                'or',
-                ['like', 'title', $q],
-                ['like', 'description', $q],
-                ['like', 'notes', $q],
-            ]);
-        }
-
-        if ($yearFrom !== null) {
-            $query->andWhere(['>=', 'year', $yearFrom]);
-        }
-
-        if ($yearTo !== null) {
-            $query->andWhere(['<=', 'year', $yearTo]);
-        }
-
-        if (!empty($genres)) {
-            $genreConditions = ['or'];
-            foreach ($genres as $genre) {
-                $genreConditions[] = ['like', 'genres_csv', $genre];
+            if (!empty($q)) {
+                $query->andWhere([
+                    'or',
+                    ['like', 'title', $q],
+                    ['like', 'description', $q],
+                    ['like', 'notes', $q],
+                ]);
             }
-            $query->andWhere($genreConditions);
+
+            if ($yearFrom !== null) {
+                $query->andWhere(['>=', 'year', $yearFrom]);
+            }
+
+            if ($yearTo !== null) {
+                $query->andWhere(['<=', 'year', $yearTo]);
+            }
+
+            if (!empty($genres)) {
+                $genreConditions = ['or'];
+                foreach ($genres as $genre) {
+                    $genreConditions[] = ['like', 'genres_csv', $genre];
+                }
+                $query->andWhere($genreConditions);
+            }
+
+            if (!empty($tagIds)) {
+                $query->joinWith('movieTags mt', false)
+                    ->andWhere(['mt.tag_id' => $tagIds])
+                    ->distinct();
+            }
+
+            $this->applySort($query, $sort, $list);
+
+            $total = (clone $query)->count();
+            $items = $query
+                ->offset(($page - 1) * $pageSize)
+                ->limit($pageSize)
+                ->all();
+
+            return [
+                'items' => array_map([$this, 'serializeMovie'], $items),
+                'total' => (int)$total,
+            ];
+        };
+
+        $db = Movie::getDb();
+        if (method_exists($db, 'useMaster')) {
+            return $db->useMaster($buildResponse);
         }
 
-        if (!empty($tagIds)) {
-            $query->joinWith('movieTags mt', false)
-                ->andWhere(['mt.tag_id' => $tagIds])
-                ->distinct();
-        }
-
-        $this->applySort($query, $sort, $list);
-
-        $total = (clone $query)->count();
-        $items = $query
-            ->offset(($page - 1) * $pageSize)
-            ->limit($pageSize)
-            ->all();
-
-        return [
-            'items' => array_map([$this, 'serializeMovie'], $items),
-            'total' => (int)$total,
-        ];
+        return $buildResponse();
     }
 
     public function actionView($id)
