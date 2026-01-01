@@ -633,7 +633,14 @@ class ApiMoviesController extends Controller
                     parse_str($rawBody, $data);
                 }
             } elseif (stripos($contentType, 'multipart/form-data') !== false) {
+                if (!empty($_POST)) {
+                    $data = array_merge($data, $_POST);
+                }
+
                 $rawBody = $request->getRawBody();
+                if ($rawBody === '') {
+                    $rawBody = (string)file_get_contents('php://input');
+                }
                 if ($rawBody !== '') {
                     $parsed = $this->parseMultipartFormData($rawBody, $contentType);
                     $data = array_merge($data, $parsed);
