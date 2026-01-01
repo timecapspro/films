@@ -267,6 +267,8 @@ class ApiNotificationsController extends Controller
         return [
             'id' => $movie->id,
             'title' => $movie->title,
+            'year' => $movie->year === null ? null : (int)$movie->year,
+            'genres_csv' => $movie->genres_csv ?? '',
             'poster_url' => $this->getPosterUrl($movie),
         ];
     }
